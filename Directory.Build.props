@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS8618;CS1591</NoWarn>
+    <!-- CS8618: Advierte sobre propiedades no anulables sin inicializar (común en DTOs de Dapper) -->
+  </PropertyGroup>
+</Project>
