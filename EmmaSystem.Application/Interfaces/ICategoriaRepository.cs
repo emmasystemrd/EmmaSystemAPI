@@ -4,10 +4,10 @@ namespace EmmaSystem.Application.Interfaces;
 
 public interface ICategoriaRepository
 {
-    Task<IReadOnlyList<CategoriaDto>> GetAllAsync(int idEmpresa, CancellationToken ct = default);
-    Task<IReadOnlyList<CategoriaDto>> GetForArticuloAsync(int idEmpresa, CancellationToken ct = default);
-    Task<IReadOnlyList<CategoriaDto>> SearchAsync(string texto, int idEmpresa, CancellationToken ct = default);
-    Task CreateAsync(CategoriaSaveDto dto, int idEmpresa, CancellationToken ct = default);
-    Task UpdateAsync(int idCategoria, CategoriaSaveDto dto, CancellationToken ct = default);
-    Task DeleteAsync(int idCategoria, CancellationToken ct = default);
+    Task<IReadOnlyList<CategoriaDto>> GetAllAsync(CancellationToken ct);
+    Task<IReadOnlyList<CategoriaDto>> GetForArticuloAsync(CancellationToken ct);
+    Task<IReadOnlyList<CategoriaDto>> SearchAsync(string texto, CancellationToken ct);
+    Task CreateAsync(CategoriaSaveDto dto, CancellationToken ct);
+    Task UpdateAsync(int id, CategoriaSaveDto dto, CancellationToken ct);
+    Task DeleteAsync(int id, CancellationToken ct);
 }

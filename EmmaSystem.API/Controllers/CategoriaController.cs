@@ -16,8 +16,6 @@ public sealed class CategoriaController : ControllerBase
 
     public CategoriaController(ICategoriaRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")!.Value);
-
     /// <summary>
     /// Listado completo para administración (tabla CRUD). Top 100 más recientes.
     /// </summary>
@@ -25,7 +23,7 @@ public sealed class CategoriaController : ControllerBase
     [Permission(Modules.Articulo, Operations.Ver)]
     public async Task<ActionResult<IReadOnlyList<CategoriaDto>>> GetAll(CancellationToken ct)
     {
-        var result = await _repo.GetAllAsync(GetIdEmpresa(), ct);
+        var result = await _repo.GetAllAsync(ct);
         return Ok(result);
     }
 
@@ -37,7 +35,7 @@ public sealed class CategoriaController : ControllerBase
     [Permission(Modules.Articulo, Operations.Ver)]
     public async Task<ActionResult<IReadOnlyList<CategoriaDto>>> GetForArticulo(CancellationToken ct)
     {
-        var result = await _repo.GetForArticuloAsync(GetIdEmpresa(), ct);
+        var result = await _repo.GetForArticuloAsync(ct);
         return Ok(result);
     }
 
@@ -51,7 +49,7 @@ public sealed class CategoriaController : ControllerBase
         if (string.IsNullOrWhiteSpace(texto))
             return BadRequest("El texto de búsqueda es requerido.");
 
-        var result = await _repo.SearchAsync(texto.Trim(), GetIdEmpresa(), ct);
+        var result = await _repo.SearchAsync(texto.Trim(), ct);
         return Ok(result);
     }
 
@@ -59,7 +57,7 @@ public sealed class CategoriaController : ControllerBase
     [Permission(Modules.Articulo, Operations.Crear)]
     public async Task<IActionResult> Create([FromBody] CategoriaSaveDto dto, CancellationToken ct)
     {
-        await _repo.CreateAsync(dto, GetIdEmpresa(), ct);
+        await _repo.CreateAsync(dto, ct);
         return Ok(new { message = "Categoría creada exitosamente." });
     }
 
