@@ -2,33 +2,33 @@
 using EmmaSystem.Application.DTOs.Configuracion;
 using EmmaSystem.Application.Interfaces;
 using EmmaSystem.Infrastructure.Data;
-using System.Data;
-using EmmaSystem.Infrastructure.Settings; // ← 1. Agregar este using
+using EmmaSystem.Infrastructure.Settings;
 using Microsoft.Extensions.Options;
-using OpenQA.Selenium;       // ← 2. Agregar este using
+using System.Data;
+
 namespace EmmaSystem.Infrastructure.Repositories;
 
 public sealed class ConfiguracionRepository : IConfiguracionRepository
 {
-    private readonly SqlConnectionFactory _factory;
-    private readonly string _passPhrase; // ← 3. Campo para guardar la clave
+    private readonly ITenantConnectionFactory _connectionFactory;
+    private readonly ITenantContext _tenantContext;
+    private readonly string _passPhrase;
 
-    // ← 4. Modificar el constructor para inyectar IOptions<EncryptionSettings>
     public ConfiguracionRepository(
-        SqlConnectionFactory factory,
+        ITenantConnectionFactory connectionFactory,
+        ITenantContext tenantContext,
         IOptions<EncryptionSettings> encryptionOptions)
     {
-        _factory = factory;
-        _passPhrase = encryptionOptions.Value.PassPhrase; // ← 5. Asignar la clave desde appsettings
+        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+        _passPhrase = encryptionOptions.Value.PassPhrase;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // FACTURACIÓN ELECTRÓNICA
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ FACTURACIÓN ELECTRÓNICA ═══
 
     public async Task<ConfFacturacionElectronicaDto?> GetFacturacionElectronicaAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var row = await conn.QueryFirstOrDefaultAsync<FactElectronicaSqlRow>(
             "SELECT TOP 1 Id, Envio_Inmediato, Ambiente, Certificado_Digital, Clave, Email, Clave_Email, FechaExpira FROM conf_fact_electronica",
@@ -36,7 +36,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         if (row == null) return null;
 
-        return new ConfFacturacionElectronicaDto  // ✅ Debe ser ConfFacturacionElectronicaDto, NO ConfFacturacionDto
+        return new ConfFacturacionElectronicaDto
         {
             Id = row.Id,
             Envio_Inmediato = row.Envio_Inmediato,
@@ -49,7 +49,6 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
         };
     }
 
-    // ✅ Clase interna exclusiva para el mapeo seguro de SQL
     internal class FactElectronicaSqlRow
     {
         public int Id { get; set; }
@@ -62,20 +61,14 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
         public DateTime? FechaExpira { get; set; }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // FACTURACIÓN ELECTRÓNICA (Método actualizado)
-    // ═══════════════════════════════════════════════════════════════
-
     public async Task UpdateFacturacionElectronicaAsync(ConfFacturacionElectronicaSaveDto dto, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Ambiente", dto.Ambiente);
         p.Add("@Envio", dto.Envio_Inmediato);
         p.Add("@Certificado", dto.Certificado_Digital);
-
-        // ← 6. Usar _passPhrase en lugar del texto hardcoded
         p.Add("@PassPhrase", _passPhrase);
         p.Add("@PassPhraseBin", dto.Clave);
         p.Add("@Email", dto.Email);
@@ -94,25 +87,21 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
             p, commandType: CommandType.Text);
     }
 
-
-    // ═══════════════════════════════════════════════════════════════
-    // PROVEEDOR / CLIENTE
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ PROVEEDOR / CLIENTE ═══
 
     public async Task<ConfProveedorClienteDto?> GetProveedorClienteAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<ConfProveedorClienteDto>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_configuracion_proveedor_cliente]",
+            new CommandDefinition("[dbo].[spmostrar_configuracion_proveedor_cliente]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
     public async Task UpdateProveedorClienteAsync(ConfProveedorClienteDto dto, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Idempresa", idEmpresa);
@@ -131,26 +120,20 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
         p.Add("@Cliente_Cumple", dto.Cliente_Cumple);
 
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[speditar_configuracion_pc]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[speditar_configuracion_pc]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // CAPITAL
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ CAPITAL ═══
 
     public async Task<(string? Capital, string? Cuenta_Cierre)> GetCapitalAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var result = await conn.QueryFirstOrDefaultAsync(
-            new CommandDefinition(
-                "[dbo].[spmostrar_capital]",
+            new CommandDefinition("[dbo].[spmostrar_capital]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         if (result == null) return (null, null);
         return (result.Capital, result.Cuenta_Cierre);
@@ -158,76 +141,65 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
     public async Task UpdateCapitalAsync(string capital, string cuentaCierre, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[speditar_configuracion_capital]",
+            new CommandDefinition("[dbo].[speditar_configuracion_capital]",
                 new { Idempresa = idEmpresa, Idcuenta = capital, Cuenta_Cierre = cuentaCierre },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // IMPUESTOS
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ IMPUESTOS ═══
 
     public async Task<ConfImpuestoDto?> GetImpuestosAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<ConfImpuestoDto>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_configuracion_impuesto]",
+            new CommandDefinition("[dbo].[spmostrar_configuracion_impuesto]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // EMPLEADOS
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ EMPLEADOS ═══
 
     public async Task<ConfEmpleadoDto?> GetEmpleadoAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<ConfEmpleadoDto>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_configuracion_empleado]",
+            new CommandDefinition("[dbo].[spmostrar_configuracion_empleado]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // TSS
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ TSS ═══
 
     public async Task<ConfTssDto?> GetTssAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<ConfTssDto>(
             "SELECT TOP 1 * FROM Conf_TSS WHERE Idempresa = @Idempresa",
             new { Idempresa = idEmpresa },
             commandType: CommandType.Text);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // FACTURACIÓN (IMPRESIÓN)
-    // ═══════════════════════════════════════════════════════════════
+    // ═══ FACTURACIÓN (IMPRESIÓN) ═══
 
     public async Task<ConfFacturacionDto?> GetFacturacionAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<ConfFacturacionDto>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_configuracion_factura]",
+            new CommandDefinition("[dbo].[spmostrar_configuracion_factura]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
     public async Task UpdateFacturacionAsync(ConfFacturacionDto dto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Idconf", dto.Idconf);
@@ -243,10 +215,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
         p.Add("@ITBIS_Incluido", dto.ITBIS_Incluido);
 
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[speditar_configuracion_factura]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[speditar_configuracion_factura]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 }

@@ -8,16 +8,22 @@ namespace EmmaSystem.Infrastructure.Repositories;
 
 public sealed class AsistenciasRepository : IAsistenciasRepository
 {
-    private readonly SqlConnectionFactory _factory;
+    private readonly ITenantConnectionFactory _connectionFactory;
+    private readonly ITenantContext _tenantContext;
 
-    public AsistenciasRepository(SqlConnectionFactory factory) => _factory = factory;
+    public AsistenciasRepository(
+        ITenantConnectionFactory connectionFactory,
+        ITenantContext tenantContext)
+    {
+        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+    }
 
     public async Task<List<EstudianteAsistenciaDto>> GetEstudiantesParaAsistenciaAsync(
         int idAsistencia, DateTime fecha, int idCurso, int? idDetalleCurso, int idInstructor, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
-        // Tu SP espera 0 en lugar de NULL para Iddetalle_Curso e Idasistencia
         var p = new DynamicParameters();
         p.Add("@Idasistencia", idAsistencia <= 0 ? 0 : idAsistencia);
         p.Add("@Fecha", fecha.Date);
@@ -35,12 +41,11 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
     public async Task<int?> GetExistingAsistenciaIdAsync(
         DateTime fecha, int idCurso, int? idDetalleCurso, int idInstructor, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Fecha", fecha.Date);
         p.Add("@Idcurso", idCurso);
-        // ⚠️ Nota: Tu SP tiene un typo en el nombre del parámetro: @Iddetall_Curso (sin la 'e' final)
         p.Add("@Iddetall_Curso", idDetalleCurso);
         p.Add("@Idinstructor", idInstructor);
 
@@ -51,16 +56,14 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
 
     public async Task<int> SaveAsistenciaAsync(AsistenciaSaveDto dto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         conn.Open();
-
         using var transaction = conn.BeginTransaction();
 
         try
         {
             int idAsistencia = dto.IdAsistencia ?? 0;
 
-            // 1. Si no existe ID, crear la cabecera de asistencia
             if (idAsistencia <= 0)
             {
                 var pHeader = new DynamicParameters();
@@ -70,7 +73,6 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
                 pHeader.Add("@Idlogin", dto.Idlogin);
                 pHeader.Add("@Idinstructor", dto.Idinstructor);
 
-                // ✅ CORRECCIÓN: Ejecutar el SP y obtener el ID devuelto
                 idAsistencia = await conn.ExecuteScalarAsync<int>(
                     new CommandDefinition("[dbo].[InsertarAsistencia]", pHeader,
                         transaction: transaction,
@@ -78,13 +80,11 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
                         cancellationToken: ct));
             }
 
-            // ✅ VERIFICACIÓN: Asegurarse de que el ID sea válido antes de insertar detalles
             if (idAsistencia <= 0)
             {
                 throw new Exception("No se pudo obtener el ID de asistencia. Verifique que el SP InsertarAsistencia devuelva el ID.");
             }
 
-            // 2. Procesar cada detalle (estudiante)
             foreach (var detalle in dto.Detalles)
             {
                 if (string.IsNullOrWhiteSpace(detalle.Asistencia))
@@ -92,7 +92,6 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
 
                 if (detalle.Iddetalle > 0)
                 {
-                    // Actualizar detalle existente
                     var pUpdate = new DynamicParameters();
                     pUpdate.Add("@Iddetalle", detalle.Iddetalle);
                     pUpdate.Add("@Asistencia", detalle.Asistencia);
@@ -103,7 +102,6 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
                 }
                 else
                 {
-                    // Insertar nuevo detalle
                     var pInsert = new DynamicParameters();
                     pInsert.Add("@Idasistencia", idAsistencia);
                     pInsert.Add("@Idestudiante", detalle.Idestudiante);
@@ -128,7 +126,7 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
     public async Task<List<AsistenciaMatrixDto>> GetMatrixAsistenciaAsync(
         DateTime fecha1, DateTime fecha2, int idCurso, int? idDetalleCurso, int idInstructor, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Fecha1", fecha1.Date);

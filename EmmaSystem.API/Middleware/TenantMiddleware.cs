@@ -2,10 +2,6 @@
 
 namespace EmmaSystem.API.Middleware;
 
-/// <summary>
-/// Middleware que establece el contexto del tenant (cliente y empresa) 
-/// para cada request autenticado
-/// </summary>
 public class TenantMiddleware
 {
     private readonly RequestDelegate _next;
@@ -19,47 +15,38 @@ public class TenantMiddleware
 
     public async Task InvokeAsync(HttpContext context, ITenantContext tenantContext)
     {
-        // Verificar si el usuario está autenticado
         if (context.User.Identity?.IsAuthenticated == true)
         {
             try
             {
-                // Buscar los claims necesarios
+                // ✅ Usar los nombres EXACTOS de los claims generados en AuthService
                 var clienteIdClaim = context.User.Claims.FirstOrDefault(c => c.Type == "ClienteId");
-                var empresaIdClaim = context.User.Claims.FirstOrDefault(c => c.Type == "EmpresaId");
+                var empresaIdClaim = context.User.Claims.FirstOrDefault(c => c.Type == "Idempresa"); // Minúscula 'e' como en BuildJwtTenant
                 var nombreEmpresaClaim = context.User.Claims.FirstOrDefault(c => c.Type == "NombreEmpresa");
+                var rncCedulaClaim = context.User.Claims.FirstOrDefault(c => c.Type == "RncCedula");
+                var ambienteClaim = context.User.Claims.FirstOrDefault(c => c.Type == "Ambiente");
 
-                // Validar que existan todos los claims requeridos
-                if (clienteIdClaim is null || empresaIdClaim is null || nombreEmpresaClaim is null)
+                if (clienteIdClaim is not null && empresaIdClaim is not null)
                 {
-                    _logger.LogWarning(
-                        "Request sin claims de tenant. ClienteId: {ClienteId}, EmpresaId: {EmpresaId}",
-                        clienteIdClaim?.Value ?? "null",
-                        empresaIdClaim?.Value ?? "null");
-                }
-                else
-                {
-                    // Establecer el contexto del tenant
                     var clienteId = int.Parse(clienteIdClaim.Value);
                     var empresaId = int.Parse(empresaIdClaim.Value);
-                    var nombreEmpresa = nombreEmpresaClaim.Value;
+                    var nombreEmpresa = nombreEmpresaClaim?.Value ?? "";
+                    var rncCedula = rncCedulaClaim?.Value ?? "";
+                    var ambiente = byte.TryParse(ambienteClaim?.Value, out var amb) ? amb : (byte)1;
 
-                    tenantContext.Establecer(clienteId, empresaId, nombreEmpresa);
+                    tenantContext.Establecer(clienteId, empresaId, nombreEmpresa, rncCedula, ambiente);
 
                     _logger.LogDebug(
-                        "Tenant establecido: ClienteId={ClienteId}, EmpresaId={EmpresaId}, Empresa={NombreEmpresa}",
-                        clienteId, empresaId, nombreEmpresa);
+                        "✅ Tenant establecido: Cliente={ClienteId}, Empresa={EmpresaId}, BD={NombreEmpresa}, RNC={RncCedula}, Amb={Ambiente}",
+                        clienteId, empresaId, nombreEmpresa, rncCedula, ambiente);
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error al establecer el contexto del tenant");
-                // No lanzamos excepción aquí para no bloquear el request,
-                // pero el repositorio fallará si intenta acceder a la BD sin tenant
             }
         }
 
-        // Continuar con el siguiente middleware en el pipeline
         await _next(context);
     }
 }

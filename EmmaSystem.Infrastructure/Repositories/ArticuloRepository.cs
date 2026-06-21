@@ -1,37 +1,42 @@
 ﻿using Dapper;
 using EmmaSystem.Application.DTOs.Articulo;
 using EmmaSystem.Application.Interfaces;
-using EmmaSystem.Infrastructure.Data;
 using System.Data;
 
 namespace EmmaSystem.Infrastructure.Repositories;
 
 public sealed class ArticuloRepository : IArticuloRepository
 {
-    private readonly SqlConnectionFactory _factory;
-    public ArticuloRepository(SqlConnectionFactory factory) => _factory = factory;
+    private readonly ITenantConnectionFactory _connectionFactory;
+    private readonly ITenantContext _tenantContext;
 
-    public async Task<IReadOnlyList<ArticuloDto>> GetAllAsync(int idEmpresa, CancellationToken ct = default)
+    public ArticuloRepository(
+        ITenantConnectionFactory connectionFactory,
+        ITenantContext tenantContext)
     {
-        using var conn = _factory.CreateConnection();
-        var p = new DynamicParameters();
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+    }
+
+    public async Task<IReadOnlyList<ArticuloDto>> GetAllAsync(CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         // Usa el SP existente que ya incluye existencia calculada
         var result = await conn.QueryAsync<ArticuloDto>(
-            new CommandDefinition("[dbo].[spmostrar_producto]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition("[dbo].[spmostrar_producto]",
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
         return result.AsList();
     }
 
-    // ... código existente ...
-
-    public async Task<IReadOnlyList<ArticuloVentaDto>> SearchForSalesAsync(string textoBuscar, int idEmpresa, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ArticuloVentaDto>> SearchForSalesAsync(string textoBuscar, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@textobuscar", textoBuscar, DbType.String);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
 
         var result = await conn.QueryAsync<ArticuloVentaDto>(
             new CommandDefinition(
@@ -43,22 +48,24 @@ public sealed class ArticuloRepository : IArticuloRepository
         return result.AsList();
     }
 
-    public async Task<IReadOnlyList<ArticuloDto>> SearchAsync(string texto, int idEmpresa, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ArticuloDto>> SearchAsync(string texto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@textobuscar", texto, DbType.String);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
 
         var result = await conn.QueryAsync<ArticuloDto>(
             new CommandDefinition("[dbo].[spbuscar_articulo1_codigo]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
         return result.AsList();
     }
 
-    public async Task<int> CreateAsync(ArticuloSaveDto dto, int idEmpresa, int idLogin, CancellationToken ct = default)
+    public async Task<int> CreateAsync(ArticuloSaveDto dto, int idLogin, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         // PASO 1: Insertar Artículo cabecera
         var pArt = new DynamicParameters();
@@ -86,13 +93,13 @@ public sealed class ArticuloRepository : IArticuloRepository
         pArt.Add("@Cta_Venta", dto.Cta_VentaAF, DbType.String);
         pArt.Add("@Facturar_Sin_Existencia", dto.Facturar_Sin_Existencia, DbType.String);
         pArt.Add("@Foto", null, DbType.Binary); // Manejo de imagen pendiente
-        pArt.Add("@Idempresa", idEmpresa, DbType.Int32);
         pArt.Add("@Estado", "A", DbType.String);
         pArt.Add("@Idarticulo", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_articulo1]", pArt,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         int idArticulo = pArt.Get<int>("@Idarticulo");
 
@@ -111,14 +118,16 @@ public sealed class ArticuloRepository : IArticuloRepository
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_detalle_producto]", pDet,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         return idArticulo;
     }
 
     public async Task UpdateAsync(int idArticulo, ArticuloSaveDto dto, int idLogin, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@Idarticulo", idArticulo, DbType.Int32);
         p.Add("@Codigo", dto.Codigo, DbType.String);
@@ -148,21 +157,23 @@ public sealed class ArticuloRepository : IArticuloRepository
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[speditar_articulo1]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
     }
 
     public async Task DeleteAsync(int idArticulo, int idLogin, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@Idarticulo", idArticulo, DbType.Int32);
         p.Add("@Idlogin", idLogin, DbType.Int32);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[speliminar_articulo1]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
     }
-    // ... código existente ...
 
     public async Task<IReadOnlyList<DetalleProductoPrecioDto>> GetDetallePreciosAsync(
         int idArticulo,
@@ -170,7 +181,7 @@ public sealed class ArticuloRepository : IArticuloRepository
         string nombre,
         CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Idarticulo", idArticulo, DbType.Int32);
@@ -186,6 +197,4 @@ public sealed class ArticuloRepository : IArticuloRepository
 
         return result.AsList();
     }
-
-
 }

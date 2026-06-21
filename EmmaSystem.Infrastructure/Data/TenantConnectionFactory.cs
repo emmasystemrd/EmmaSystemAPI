@@ -76,40 +76,48 @@ public class TenantConnectionFactory : ITenantConnectionFactory
 
         return connection;
     }
-
-    /// <summary>
-    /// Obtiene los datos de la empresa desde EmmaSystemCentral
-    /// </summary>
     private async Task<EmpresaContratada> ObtenerEmpresaAsync(int empresaId)
     {
         using var connectionCentral = new SqlConnection(_settings.CadenaConexionCentral);
         await connectionCentral.OpenAsync();
 
+        // ✅ Usar VARBINARY(MAX) explícitamente y mapeo manual
         const string sql = @"
-            SELECT 
-                ec.IdEmpresa,
-                ec.NombreEmpresa,
-                ec.CadenaConexionEnc,
-                ec.VectorIV,
-                ec.Estado,
-                c.SaltCifrado
-            FROM empresas_contratadas ec
-            INNER JOIN clientes c ON ec.IdCliente = c.IdCliente
-            WHERE ec.IdEmpresa = @EmpresaId";
+        SELECT 
+            ec.IdEmpresa,
+            ec.NombreEmpresa,
+            CAST(ec.CadenaConexionEnc AS VARBINARY(MAX)) AS CadenaConexionEnc,
+            CAST(ec.VectorIV AS VARBINARY(16)) AS VectorIV,
+            ec.Estado,
+            CAST(c.SaltCifrado AS VARBINARY(64)) AS SaltCifrado
+        FROM empresas_contratadas ec
+        INNER JOIN clientes c ON ec.IdCliente = c.IdCliente
+        WHERE ec.IdEmpresa = @EmpresaId AND ec.Estado = 1";
 
-        var empresa = await connectionCentral.QueryFirstOrDefaultAsync<EmpresaContratada>(
-            sql,
-            new { EmpresaId = empresaId });
+        // ✅ Mapeo MANUAL usando QueryFirstOrDefault<dynamic> para evitar problemas de tipo
+        var row = await connectionCentral.QueryFirstOrDefaultAsync(sql, new { EmpresaId = empresaId });
 
-        if (empresa is null)
+        if (row is null)
+            throw new InvalidOperationException($"No se encontró la empresa con ID {empresaId}");
+
+        // Conversión explícita y segura
+        var saltBytes = (byte[])row.SaltCifrado;
+
+        // ⚠️ LOG TEMPORAL PARA DIAGNÓSTICO
+        Console.WriteLine($"[DEBUG-MAPEO] Salt Length: {saltBytes.Length}");
+        Console.WriteLine($"[DEBUG-MAPEO] Salt Hex: {Convert.ToHexString(saltBytes)}");
+        Console.WriteLine($"[DEBUG-MAPEO] Último byte: {saltBytes[^1]:X2}");
+
+        return new EmpresaContratada
         {
-            throw new InvalidOperationException(
-                $"No se encontró la empresa con ID {empresaId} en EmmaSystemCentral");
-        }
-
-        return empresa;
+            IdEmpresa = (int)row.IdEmpresa,
+            NombreEmpresa = (string)row.NombreEmpresa,
+            CadenaConexionEnc = (byte[])row.CadenaConexionEnc,
+            VectorIV = (byte[])row.VectorIV,
+            Estado = (int)row.Estado,
+            SaltCifrado = saltBytes
+        };
     }
-
     /// <summary>
     /// Convierte el código de estado a nombre descriptivo
     /// </summary>
@@ -128,9 +136,11 @@ public class TenantConnectionFactory : ITenantConnectionFactory
     {
         public int IdEmpresa { get; set; }
         public string NombreEmpresa { get; set; } = string.Empty;
-        public string CadenaConexionEnc { get; set; } = string.Empty;
-        public string VectorIV { get; set; } = string.Empty;
+        public byte[] CadenaConexionEnc { get; set; } = Array.Empty<byte>();  // ← VARBINARY(MAX)
+        public byte[] VectorIV { get; set; } = Array.Empty<byte>();           // ← VARBINARY(16)
         public int Estado { get; set; }
-        public string SaltCifrado { get; set; } = string.Empty;
+        public byte[] SaltCifrado { get; set; } = Array.Empty<byte>();        // ← VARBINARY(64) desde clientes
+        public string RncCedula { get; set; } = string.Empty;
+        public byte Ambiente { get; set; } = 1;
     }
 }

@@ -16,26 +16,28 @@ public sealed class ArticuloController : ControllerBase
 
     public ArticuloController(IArticuloRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")!.Value);
+    /// <summary>
+    /// Obtiene el ID del usuario autenticado para auditoría
+    /// </summary>
     private int GetIdLogin() => int.Parse(User.FindFirst("Idusuario")!.Value);
 
     [HttpGet]
     [Permission(Modules.Articulo, Operations.Ver)]
     public async Task<ActionResult<IReadOnlyList<ArticuloDto>>> GetAll(CancellationToken ct)
     {
-        var result = await _repo.GetAllAsync(GetIdEmpresa(), ct);
+        var result = await _repo.GetAllAsync(ct);
         return Ok(result);
     }
 
     [HttpGet("buscar/venta")]
     [Permission(Modules.Cliente, Operations.Consultar)] // Asegúrate de tener Modules.Venta en Constants
     public async Task<ActionResult<IReadOnlyList<ArticuloVentaDto>>> SearchForSales(
-    [FromQuery] string? texto,
-    CancellationToken ct)
+        [FromQuery] string? texto,
+        CancellationToken ct)
     {
         // ✅ Si texto es null o vacío, pasar string vacío al SP (que debe devolver todos)
         var textoBuscar = string.IsNullOrWhiteSpace(texto) ? "" : texto.Trim();
-        var result = await _repo.SearchForSalesAsync(textoBuscar, GetIdEmpresa(), ct);
+        var result = await _repo.SearchForSalesAsync(textoBuscar, ct);
         return Ok(result);
     }
 
@@ -47,7 +49,7 @@ public sealed class ArticuloController : ControllerBase
         if (string.IsNullOrWhiteSpace(texto))
             return BadRequest("El texto de búsqueda es requerido.");
 
-        var result = await _repo.SearchAsync(texto, GetIdEmpresa(), ct);
+        var result = await _repo.SearchAsync(texto, ct);
         return Ok(result);
     }
 
@@ -55,7 +57,7 @@ public sealed class ArticuloController : ControllerBase
     [Permission(Modules.Articulo, Operations.Crear)]
     public async Task<IActionResult> Create([FromBody] ArticuloSaveDto dto, CancellationToken ct)
     {
-        var id = await _repo.CreateAsync(dto, GetIdEmpresa(), GetIdLogin(), ct);
+        var id = await _repo.CreateAsync(dto, GetIdLogin(), ct);
         return Ok(new { message = "Artículo creado exitosamente.", idArticulo = id });
     }
 
@@ -85,11 +87,11 @@ public sealed class ArticuloController : ControllerBase
     {
         if (idMedida <= 0)
             return BadRequest("El parámetro 'idMedida' es requerido y debe ser mayor a 0.");
+
         // ✅ Si texto es null o vacío, pasar string vacío al SP (que debe devolver todos)
         var textoBuscar = string.IsNullOrWhiteSpace(nombre) ? "" : nombre.Trim();
 
-        var result = await _repo.GetDetallePreciosAsync(idArticulo, idMedida,textoBuscar, ct);
+        var result = await _repo.GetDetallePreciosAsync(idArticulo, idMedida, textoBuscar, ct);
         return Ok(result);
     }
-
 }

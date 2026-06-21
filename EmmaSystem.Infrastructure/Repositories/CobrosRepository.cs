@@ -8,27 +8,35 @@ namespace EmmaSystem.Infrastructure.Repositories;
 
 public sealed class CobrosRepository : ICobrosRepository
 {
-    private readonly SqlConnectionFactory _factory;
+    private readonly ITenantConnectionFactory _connectionFactory;
+    private readonly ITenantContext _tenantContext;
 
-    public CobrosRepository(SqlConnectionFactory factory) => _factory = factory;
+    public CobrosRepository(
+        ITenantConnectionFactory connectionFactory,
+        ITenantContext tenantContext)
+    {
+        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+    }
 
     // ═══ COBROS NORMALES ═══
 
     public async Task<IReadOnlyList<CobroListadoDto>> GetAllAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var rows = await conn.QueryAsync<CobroSqlRow>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_cobro1]",
+            new CommandDefinition("[dbo].[spmostrar_cobro1]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return rows.Select(MapToListado).ToList();
     }
 
     public async Task<IReadOnlyList<CobroListadoDto>> SearchAsync(int idEmpresa, DateTime? fecha1, DateTime? fecha2, bool isFecha, string texto, string columna, int adjunto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@Fecha1", fecha1 ?? DateTime.MinValue);
         p.Add("@Fecha2", fecha2 ?? DateTime.MaxValue);
@@ -39,23 +47,20 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@Idempresa", idEmpresa);
 
         var rows = await conn.QueryAsync<CobroSqlRow>(
-            new CommandDefinition(
-                "[dbo].[spbuscar_cobro1_columna]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[spbuscar_cobro1_columna]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return rows.Select(MapToListado).ToList();
     }
 
     public async Task<CobroDetalleDto?> GetByIdAsync(int idCobro, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var row = await conn.QueryFirstOrDefaultAsync<CobroDetalleSqlRow>(
-            new CommandDefinition(
-                "[dbo].[spbuscar_cobro1_id]",
+            new CommandDefinition("[dbo].[spbuscar_cobro1_id]",
                 new { Idcobro = idCobro, Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         if (row == null) return null;
         return MapToDetalle(row);
@@ -63,13 +68,12 @@ public sealed class CobrosRepository : ICobrosRepository
 
     public async Task<CobroDetalleDto?> GetByCodigoAsync(string codigo, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var row = await conn.QueryFirstOrDefaultAsync<CobroDetalleSqlRow>(
-            new CommandDefinition(
-                "[dbo].[spbuscar_cobro1_codigo]",
+            new CommandDefinition("[dbo].[spbuscar_cobro1_codigo]",
                 new { TextoBuscar = codigo, Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         if (row == null) return null;
         return MapToDetalle(row);
@@ -77,7 +81,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
     public async Task<int> InsertAsync(CobroSaveDto dto, int idLogin, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         conn.Open();
         using var transaction = conn.BeginTransaction();
 
@@ -95,8 +99,6 @@ public sealed class CobrosRepository : ICobrosRepository
             p.Add("@Retencion_ISR", dto.Retencion_ISR);
             p.Add("@Efectivo", dto.Efectivo);
             p.Add("@Cheque", dto.Cheque);
-
-            // ✅ CORRECCIÓN: Especificar DbType para campos NULL
             p.Add("@Banco_Ck", dto.Banco_Ck, DbType.Int32);
             p.Add("@Num_Ck", dto.Num_Ck);
             p.Add("@Transferencia", dto.Transferencia);
@@ -110,16 +112,11 @@ public sealed class CobrosRepository : ICobrosRepository
             p.Add("@Idempresa", idEmpresa);
 
             await conn.ExecuteAsync(
-                new CommandDefinition(
-                    "[dbo].[spinsertar_cobro1]",
-                    p,
-                    transaction: transaction,
-                    commandType: CommandType.StoredProcedure,
-                    cancellationToken: ct));
+                new CommandDefinition("[dbo].[spinsertar_cobro1]", p,
+                    transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
             var idCobro = p.Get<int>("@Idcobro");
 
-            // Insertar detalles
             foreach (var det in dto.Detalles)
             {
                 if (det.Monto <= 0) continue;
@@ -141,12 +138,8 @@ public sealed class CobrosRepository : ICobrosRepository
                 pDet.Add("@Monto", det.Monto);
 
                 await conn.ExecuteAsync(
-                    new CommandDefinition(
-                        "[dbo].[spinsertar_detalle_cobro1]",
-                        pDet,
-                        transaction: transaction,
-                        commandType: CommandType.StoredProcedure,
-                        cancellationToken: ct));
+                    new CommandDefinition("[dbo].[spinsertar_detalle_cobro1]", pDet,
+                        transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
             }
 
             transaction.Commit();
@@ -161,7 +154,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
     public async Task UpdateAsync(int idCobro, CobroSaveDto dto, int idLogin, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         conn.Open();
         using var transaction = conn.BeginTransaction();
 
@@ -176,8 +169,6 @@ public sealed class CobrosRepository : ICobrosRepository
             p.Add("@Retencion_ISR", dto.Retencion_ISR);
             p.Add("@Efectivo", dto.Efectivo);
             p.Add("@Cheque", dto.Cheque);
-
-            // ✅ CORRECCIÓN: Especificar DbType para campos NULL
             p.Add("@Banco_Ck", dto.Banco_Ck, DbType.Int32);
             p.Add("@Num_Ck", dto.Num_Ck);
             p.Add("@Transferencia", dto.Transferencia);
@@ -190,18 +181,12 @@ public sealed class CobrosRepository : ICobrosRepository
             p.Add("@Idlogin", idLogin);
 
             await conn.ExecuteAsync(
-                new CommandDefinition(
-                    "[dbo].[speditar_cobro1]",
-                    p,
-                    transaction: transaction,
-                    commandType: CommandType.StoredProcedure,
-                    cancellationToken: ct));
+                new CommandDefinition("[dbo].[speditar_cobro1]", p,
+                    transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
-            // Eliminar detalles anteriores y reinsertar
             await conn.ExecuteAsync(
                 "DELETE FROM Detalle_Cobro1 WHERE Idcobro = @Idcobro",
-                new { Idcobro = idCobro },
-                transaction: transaction);
+                new { Idcobro = idCobro }, transaction: transaction);
 
             foreach (var det in dto.Detalles)
             {
@@ -224,12 +209,8 @@ public sealed class CobrosRepository : ICobrosRepository
                 pDet.Add("@Monto", det.Monto);
 
                 await conn.ExecuteAsync(
-                    new CommandDefinition(
-                        "[dbo].[spinsertar_detalle_cobro1]",
-                        pDet,
-                        transaction: transaction,
-                        commandType: CommandType.StoredProcedure,
-                        cancellationToken: ct));
+                    new CommandDefinition("[dbo].[spinsertar_detalle_cobro1]", pDet,
+                        transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
             }
 
             transaction.Commit();
@@ -243,15 +224,14 @@ public sealed class CobrosRepository : ICobrosRepository
 
     public async Task<int> InsertAvanceAsync(AvanceClienteSaveDto dto, int idLogin, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@Codigo", dto.Codigo);
         p.Add("@Fecha", dto.Fecha);
         p.Add("@Idcliente", dto.Idcliente);
         p.Add("@Efectivo", dto.Efectivo);
         p.Add("@Cheque", dto.Cheque);
-
-        // ✅ CORRECCIÓN: Especificar DbType para campos NULL
         p.Add("@Banco_Ck", dto.Banco_Ck, DbType.Int32);
         p.Add("@Num_Ck", dto.Num_Ck);
         p.Add("@Transferencia", dto.Transferencia);
@@ -264,25 +244,21 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@Idempresa", idEmpresa);
 
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[spinsertar_avance_cliente]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[spinsertar_avance_cliente]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return await conn.ExecuteScalarAsync<int>("SELECT CAST(SCOPE_IDENTITY() AS INT)");
     }
 
     public async Task UpdateAvanceAsync(int idCobro, AvanceClienteSaveDto dto, int idLogin, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@Idcobro", idCobro);
         p.Add("@Fecha", dto.Fecha);
         p.Add("@Efectivo", dto.Efectivo);
         p.Add("@Cheque", dto.Cheque);
-
-        // ✅ CORRECCIÓN: Especificar DbType para campos NULL
         p.Add("@Banco_Ck", dto.Banco_Ck, DbType.Int32);
         p.Add("@Num_Ck", dto.Num_Ck);
         p.Add("@Transferencia", dto.Transferencia);
@@ -294,41 +270,38 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@Idlogin", idLogin);
 
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[speditar_avance_cliente]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[speditar_avance_cliente]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
     public async Task DeleteAsync(int idCobro, int idLogin, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[speliminar_cobro]",
+            new CommandDefinition("[dbo].[speliminar_cobro]",
                 new { Idlogin = idLogin, Idcobro = idCobro },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
     // ═══ AVANCES DE CLIENTE ═══
 
     public async Task<IReadOnlyList<CobroListadoDto>> GetAllAvancesAsync(int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var rows = await conn.QueryAsync<CobroSqlRow>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_avance_cliente]",
+            new CommandDefinition("[dbo].[spmostrar_avance_cliente]",
                 new { Idempresa = idEmpresa },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return rows.Select(MapToListado).ToList();
     }
 
     public async Task<IReadOnlyList<CobroListadoDto>> SearchAvancesAsync(int idEmpresa, DateTime? fecha1, DateTime? fecha2, bool isFecha, string texto, string columna, int adjunto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@Fecha1", fecha1 ?? DateTime.MinValue);
         p.Add("@Fecha2", fecha2 ?? DateTime.MaxValue);
@@ -339,18 +312,18 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@Idempresa", idEmpresa);
 
         var rows = await conn.QueryAsync<CobroSqlRow>(
-            new CommandDefinition(
-                "[dbo].[spbuscar_avance_cliente_columna]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[spbuscar_avance_cliente_columna]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return rows.Select(MapToListado).ToList();
     }
+
     // ═══ DETALLES ═══
 
     public async Task<IReadOnlyList<DetalleCobroDto>> GetDetallesAsync(int idCobro, int idCliente, DateTime fecha, int idEmpresa, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var p = new DynamicParameters();
         p.Add("@TextoBuscar", idCobro);
         p.Add("@Idpersona", idCliente);
@@ -358,36 +331,33 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@Idempresa", idEmpresa);
 
         var result = await conn.QueryAsync<DetalleCobroDto>(
-            new CommandDefinition(
-                "[dbo].[spmostrar_detalle_cobro1]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[spmostrar_detalle_cobro1]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return result.ToList();
     }
 
     public async Task<int> GetIdDocumentoAsync(int idEmpresa, string tipo, string noFactura, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.ExecuteScalarAsync<int>(
-            new CommandDefinition(
-                "[dbo].[spobtener_iddocumento]",
+            new CommandDefinition("[dbo].[spobtener_iddocumento]",
                 new { Idempresa = idEmpresa, Tipo = tipo, No_Factura = noFactura },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
     // ═══ REPORTE ═══
 
     public async Task<IReadOnlyList<CobroReporteDto>> GetReporteAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idUsuario, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var result = await conn.QueryAsync<CobroReporteDto>(
-            new CommandDefinition(
-                "[dbo].[r_cobro1]",
+            new CommandDefinition("[dbo].[r_cobro1]",
                 new { Idempresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, Idusuario = idUsuario },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return result.ToList();
     }
 
@@ -395,7 +365,8 @@ public sealed class CobrosRepository : ICobrosRepository
 
     public async Task<byte[]?> GetPdfAsync(int idCobro, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<byte[]?>(
             "SELECT PDF FROM Cobro1 WHERE Idcobro = @Idcobro",
             new { Idcobro = idCobro });
@@ -444,7 +415,6 @@ public sealed class CobrosRepository : ICobrosRepository
 }
 
 // ═══ Clases internas para mapeo seguro ═══
-
 internal class CobroSqlRow
 {
     public int Idcobro { get; set; }

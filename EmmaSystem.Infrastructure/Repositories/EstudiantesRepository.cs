@@ -8,43 +8,46 @@ namespace EmmaSystem.Infrastructure.Repositories;
 
 public sealed class EstudiantesRepository : IEstudiantesRepository
 {
-    private readonly SqlConnectionFactory _factory;
+    private readonly ITenantConnectionFactory _connectionFactory;
+    private readonly ITenantContext _tenantContext;
 
-    public EstudiantesRepository(SqlConnectionFactory factory) => _factory = factory;
+    public EstudiantesRepository(
+        ITenantConnectionFactory connectionFactory,
+        ITenantContext tenantContext)
+    {
+        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
+        _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+    }
 
     // ═══ LISTADOS ═══
 
     public async Task<IReadOnlyList<EstudianteListadoDto>> GetAllAsync(CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         var result = await conn.QueryAsync<EstudianteListadoDto>(
-            new CommandDefinition(
-                "[dbo].[MostrarEstudiante1]",
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[MostrarEstudiante1]",
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
         return result.ToList();
     }
 
     public async Task<IReadOnlyList<EstudianteListadoDto>> SearchAsync(string texto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
-        // ✅ Usar clase tipada para evitar problemas con dynamic
         var result = await conn.QueryAsync<EstudianteSqlRow>(
-            new CommandDefinition(
-                "[dbo].[BuscarEstudiante]",
+            new CommandDefinition("[dbo].[BuscarEstudiante]",
                 new { TextoBuscar = texto },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
-        // ✅ Ahora las propiedades tienen tipos definidos, no dynamic
         return result.Select(r => new EstudianteListadoDto
         {
             IdEstudiante = r.Idestudiante,
             Codigo = r.Codigo ?? "",
             Estudiante = r.Estudiante ?? "",
             Num_Documento = r.Num_Documento ?? "",
-            Fecha_Nacimiento = r.Fecha_Nacimiento, // ✅ Ya es DateTime?, no necesita conversión
+            Fecha_Nacimiento = r.Fecha_Nacimiento,
             Telefono = r.Telefono ?? "",
             Estado = r.Estado ?? ""
         }).ToList();
@@ -54,11 +57,10 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
 
     public async Task<EstudianteDetalleDto?> GetByIdAsync(int idEstudiante, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
-        // Usamos clase tipada para evitar problemas con byte[] y DBNull
         var row = await conn.QueryFirstOrDefaultAsync<EstudianteSqlRow>(
-            @"SELECT 
+            @"SELECT
                 e.Idestudiante, e.Codigo, e.Nombres, e.Apellido1, e.Apellido2,
                 (e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2) as Estudiante,
                 e.Sexo, e.Foto, e.Tipo_Doc, e.Num_Documento, e.Lugar_Nacimiento,
@@ -83,7 +85,7 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
             Apellido2 = row.Apellido2 ?? "",
             Estudiante = row.Estudiante ?? "",
             Sexo = row.Sexo ?? "",
-            FotoBase64 = null, // La foto se carga por separado
+            FotoBase64 = null,
             TieneFoto = row.Foto != null && row.Foto.Length > 0,
             Tipo_Doc = row.Tipo_Doc,
             Num_Documento = row.Num_Documento ?? "",
@@ -110,7 +112,8 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
 
     public async Task<byte[]?> GetFotoAsync(int idEstudiante, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         return await conn.QueryFirstOrDefaultAsync<byte[]?>(
             "SELECT Foto FROM Estudiante WHERE Idestudiante = @Id",
             new { Id = idEstudiante },
@@ -121,7 +124,7 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
 
     public async Task<int> InsertAsync(EstudianteSaveDto dto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
         p.Add("@Codigo", dto.Codigo);
@@ -150,13 +153,9 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
         p.Add("@Estado", dto.Estado);
 
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[InsertarEstudiante]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[InsertarEstudiante]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
-        // Obtener el ID recién insertado
         var id = await conn.ExecuteScalarAsync<int>(
             "SELECT SCOPE_IDENTITY()",
             commandType: CommandType.Text);
@@ -166,9 +165,8 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
 
     public async Task UpdateAsync(int idEstudiante, EstudianteSaveDto dto, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
-        // Si no se envía foto nueva, conservar la actual
         byte[]? fotoFinal = dto.Foto;
         if (fotoFinal == null)
         {
@@ -203,22 +201,18 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
         p.Add("@Estado", dto.Estado);
 
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[ModificarEstudiante]",
-                p,
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+            new CommandDefinition("[dbo].[ModificarEstudiante]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
     public async Task DeleteAsync(int idEstudiante, CancellationToken ct = default)
     {
-        using var conn = _factory.CreateConnection();
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
         await conn.ExecuteAsync(
-            new CommandDefinition(
-                "[dbo].[EliminarEstudiante]",
+            new CommandDefinition("[dbo].[EliminarEstudiante]",
                 new { Idestudiante = idEstudiante },
-                commandType: CommandType.StoredProcedure,
-                cancellationToken: ct));
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 }
 
