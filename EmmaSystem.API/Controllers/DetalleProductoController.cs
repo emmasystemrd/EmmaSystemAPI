@@ -27,13 +27,22 @@ public sealed class DetalleProductoController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>
-    /// Agrega una nueva presentación al artículo
-    /// </summary>
     [HttpPost]
     [Permission(Modules.Articulo, Operations.Editar)]
     public async Task<IActionResult> Create(int idArticulo, [FromBody] DetalleProductoSaveDto dto, CancellationToken ct)
     {
+        // 🔍 TEMPORAL: Ver errores específicos
+        if (!ModelState.IsValid)
+        {
+            var errores = ModelState
+                .Where(x => x.Value.Errors.Count > 0)
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value.Errors.Select(e => e.ErrorMessage).ToArray()
+                );
+            return BadRequest(new { message = "Errores de validación", errores });
+        }
+
         if (idArticulo != dto.Idarticulo)
             return BadRequest("El ID del artículo en la ruta no coincide con el del cuerpo.");
 

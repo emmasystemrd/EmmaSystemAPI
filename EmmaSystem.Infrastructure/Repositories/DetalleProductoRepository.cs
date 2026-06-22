@@ -44,7 +44,8 @@ public sealed class DetalleProductoRepository : IDetalleProductoRepository
         p.Add("@Costo", dto.Costo, DbType.Decimal);
         p.Add("@Margen", dto.Margen, DbType.Decimal);
         p.Add("@Precio", dto.Precio, DbType.Decimal);
-        p.Add("@Existencia", 0m, DbType.Decimal);
+        // ✅ CAMBIAR: Usar dto.Existencia en lugar de 0m
+        p.Add("@Existencia", dto.Existencia, DbType.Decimal);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_detalle_producto]",

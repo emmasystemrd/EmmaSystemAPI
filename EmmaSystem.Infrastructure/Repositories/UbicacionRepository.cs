@@ -10,7 +10,7 @@ public sealed class UbicacionRepository : IUbicacionRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public UbicacionRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -78,7 +78,7 @@ public sealed class UbicacionRepository : IUbicacionRepository
             ORDER BY Ruta";
 
         var result = await conn.QueryAsync<RutaDto>(
-            new CommandDefinition(sql, new { Idempresa = idEmpresa }, cancellationToken: ct));
+            new CommandDefinition(sql, new { Idempresa = EmpresaIdInterna }, cancellationToken: ct));
 
         return result.AsList();
     }

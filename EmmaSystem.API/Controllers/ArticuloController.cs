@@ -94,4 +94,24 @@ public sealed class ArticuloController : ControllerBase
         var result = await _repo.GetDetallePreciosAsync(idArticulo, idMedida, textoBuscar, ct);
         return Ok(result);
     }
+    [HttpGet("{id:int}")]
+    [Permission(Modules.Articulo, Operations.Ver)]
+    public async Task<ActionResult<ArticuloDto>> GetById(int id, CancellationToken ct)
+    {
+        var result = await _repo.GetByIdAsync(id, ct);
+        if (result == null)
+            return NotFound(new { message = "Producto no encontrado." });
+
+        return Ok(result);
+    }
+    [HttpGet("secuencia/{tipo}")]
+    [Permission(Modules.Articulo, Operations.Crear)]
+    public async Task<ActionResult<int>> GetSecuencia(string tipo, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(tipo) || tipo.Length != 1)
+            return BadRequest("El tipo debe ser un solo carácter (ej: 'P' o 'M').");
+
+        var secuencia = await _repo.GetSecuenciaAsync(tipo, ct);
+        return Ok(secuencia);
+    }
 }

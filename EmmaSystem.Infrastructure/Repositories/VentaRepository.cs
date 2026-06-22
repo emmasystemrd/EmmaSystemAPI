@@ -10,7 +10,7 @@ public sealed class VentaRepository : IVentaRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public VentaRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -27,7 +27,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryAsync<VentaListadoDto>(
             new CommandDefinition("[dbo].[spmostrar_venta]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();
@@ -39,7 +39,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryAsync<VentaPendienteDto>(
             new CommandDefinition("[dbo].[spmostrar_venta1_pendiente]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();
@@ -51,7 +51,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryAsync<VentaPendienteDto>(
             new CommandDefinition("[dbo].[spbuscar_venta1_pendiente]",
-                new { Idempresa = idEmpresa, TextoBuscar = textoBuscar },
+                new { Idempresa = EmpresaIdInterna, TextoBuscar = textoBuscar },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();
@@ -65,7 +65,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryFirstOrDefaultAsync<VentaDetalleDto>(
             new CommandDefinition("[dbo].[spcargar_venta1_ncf]",
-                new { Idempresa = idEmpresa, NCF = ncf },
+                new { Idempresa = EmpresaIdInterna, NCF = ncf },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result;
@@ -77,7 +77,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryFirstOrDefaultAsync<VentaDetalleDto>(
             new CommandDefinition("[dbo].[spcargar_venta1_id]",
-                new { Idempresa = idEmpresa, Idventa = idVenta },
+                new { Idempresa = EmpresaIdInterna, Idventa = idVenta },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result;
@@ -89,7 +89,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryFirstOrDefaultAsync<VentaPagoDto>(
             new CommandDefinition("[dbo].[spventa_pagada]",
-                new { Idempresa = idEmpresa, No_Factura = noFactura },
+                new { Idempresa = EmpresaIdInterna, No_Factura = noFactura },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result;
@@ -129,7 +129,7 @@ public sealed class VentaRepository : IVentaRepository
             p.Add("@Iddepartamento", venta.Iddepartamento);
             p.Add("@Idlogin", venta.Idlogin);
             p.Add("@Idvendedor", venta.Idvendedor);
-            p.Add("@Idempresa", idEmpresa);
+            p.Add("@Idempresa", EmpresaIdInterna);
 
             await conn.ExecuteAsync(
                 new CommandDefinition("[dbo].[spinsertar_venta1]", p,
@@ -280,7 +280,7 @@ public sealed class VentaRepository : IVentaRepository
                     IsFecha = isFecha ? 1 : 0,
                     TextoBuscar = textoBuscar,
                     Columna = columna,
-                    Idempresa = idEmpresa
+                    Idempresa = EmpresaIdInterna
                 },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
@@ -394,7 +394,7 @@ public sealed class VentaRepository : IVentaRepository
 
         var result = await conn.QueryFirstOrDefaultAsync<FacturaReporteDto>(
             new CommandDefinition("[dbo].[spreporte_factura]",
-                new { no_factura = noFactura, Idempresa = idEmpresa },
+                new { no_factura = noFactura, Idempresa =  EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result;

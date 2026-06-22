@@ -10,7 +10,7 @@ public sealed class EmpresaRepository : IEmpresaRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public EmpresaRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -29,7 +29,7 @@ public sealed class EmpresaRepository : IEmpresaRepository
                      CASE WHEN Logo IS NOT NULL THEN 1 ELSE 0 END AS TieneLogo
               FROM Empresa
               WHERE Idempresa = @Idempresa",
-            new { Idempresa = idEmpresa },
+            new { Idempresa = EmpresaIdInterna },
             commandType: CommandType.Text);
 
         if (row is null) return null;
@@ -59,7 +59,7 @@ public sealed class EmpresaRepository : IEmpresaRepository
 
         return await conn.QueryFirstOrDefaultAsync<byte[]?>(
             "SELECT Logo FROM Empresa WHERE Idempresa = @Id",
-            new { Id = idEmpresa },
+            new { Id = EmpresaIdInterna },
             commandType: CommandType.Text);
     }
 

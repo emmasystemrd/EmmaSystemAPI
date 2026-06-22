@@ -10,7 +10,7 @@ public sealed class ProveedorRepository : IProveedorRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public ProveedorRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -24,7 +24,7 @@ public sealed class ProveedorRepository : IProveedorRepository
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         var result = await conn.QueryAsync<ProveedorDto>(
             new CommandDefinition("[dbo].[spmostrar_proveedor1]", p,
@@ -65,7 +65,7 @@ public sealed class ProveedorRepository : IProveedorRepository
         p.Add("@Idmunicipio", dto.Idmunicipio, DbType.Int32);
         p.Add("@Idsector", dto.Idsector, DbType.Int32);
         p.Add("@Idlogin", idLogin, DbType.Int32);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_proveedor1]", p,

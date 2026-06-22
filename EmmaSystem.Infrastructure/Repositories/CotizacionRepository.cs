@@ -10,7 +10,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public CotizacionRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -25,7 +25,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
 
         var result = await conn.QueryAsync<CotizacionDto>(
             new CommandDefinition("[dbo].[spmostrar_cotizacion]",
-                new { Idempresa = idEmpresa, Tipo = tipo },
+                new { Idempresa = EmpresaIdInterna, Tipo = tipo },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.AsList();
@@ -37,7 +37,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
 
         var result = await conn.QueryAsync<CotizacionDto>(
             new CommandDefinition("[dbo].[spbuscar_cotizacion]",
-                new { TextoBuscar = texto, Tipo = tipo, Fecha1 = fecha1, Fecha2 = fecha2, Proceso = proceso, Idempresa = idEmpresa },
+                new { TextoBuscar = texto, Tipo = tipo, Fecha1 = fecha1, Fecha2 = fecha2, Proceso = proceso, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.AsList();
@@ -68,7 +68,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
         p.Add("@descuento", dto.Descuento, DbType.Decimal);
         p.Add("@itbis", dto.Itbis, DbType.Decimal);
         p.Add("@subtotal", dto.Subtotal, DbType.Decimal);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_cotizacion]", p,
@@ -199,7 +199,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
 
         var result = await conn.QueryAsync<VendedorDto>(
             new CommandDefinition("[dbo].[spmostrar_vendedor]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.AsList();
@@ -212,7 +212,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
         var p = new DynamicParameters();
         p.Add("@No_Cotizacion", noCotizacion, DbType.String);
         p.Add("@Tipo", tipo, DbType.String);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         return await conn.QueryFirstOrDefaultAsync<CotizacionImpresionDto>(
             new CommandDefinition("[dbo].[Imprimir_Cotizacion]", p,
@@ -229,7 +229,7 @@ public sealed class CotizacionRepository : ICotizacionRepository
             WHERE Tipo = @Tipo AND Idempresa = @IdEmpresa;";
 
         var result = await conn.QueryFirstOrDefaultAsync<string>(
-            new CommandDefinition(sql, new { Tipo = tipo, IdEmpresa = idEmpresa }, cancellationToken: ct));
+            new CommandDefinition(sql, new { Tipo = tipo, IdEmpresa = EmpresaIdInterna }, cancellationToken: ct));
 
         return result ?? "0000000001";
     }

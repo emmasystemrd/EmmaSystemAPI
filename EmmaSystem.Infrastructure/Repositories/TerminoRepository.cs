@@ -10,7 +10,7 @@ public sealed class TerminoRepository : ITerminoRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public TerminoRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -25,7 +25,7 @@ public sealed class TerminoRepository : ITerminoRepository
 
         var result = await conn.QueryAsync<TerminoDto>(
             new CommandDefinition("[dbo].[spmostrar_termino]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.AsList();
@@ -37,7 +37,7 @@ public sealed class TerminoRepository : ITerminoRepository
 
         var result = await conn.QueryAsync<TerminoDto>(
             new CommandDefinition("[dbo].[spbuscar_termino]",
-                new { textobuscar = texto, Idempresa = idEmpresa },
+                new { textobuscar = texto, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.AsList();
@@ -49,7 +49,7 @@ public sealed class TerminoRepository : ITerminoRepository
 
         var result = await conn.QueryFirstOrDefaultAsync<TerminoDto>(
             new CommandDefinition("[dbo].[spbuscar_termino_codigo]",
-                new { Idtermino = idTermino, Idempresa = idEmpresa },
+                new { Idtermino = idTermino, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result;
@@ -67,7 +67,7 @@ public sealed class TerminoRepository : ITerminoRepository
         p.Add("@no_pagos", dto.No_Pagos, DbType.Int32);
         p.Add("@dias_desc", dto.Dias_Desc, DbType.Int32);
         p.Add("@p_descuento", dto.P_Descuento, DbType.Decimal);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_termino]",

@@ -10,6 +10,9 @@ public sealed class ArticuloRepository : IArticuloRepository
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
 
+    // ✅ Constante: dentro de cada BD de empresa, IdEmpresa siempre es 1
+    private const int EmpresaIdInterna = 1;
+
     public ArticuloRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -22,25 +25,31 @@ public sealed class ArticuloRepository : IArticuloRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
-        // Usa el SP existente que ya incluye existencia calculada
+        // ✅ spmostrar_producto REQUIERE @Idempresa
+        var p = new DynamicParameters();
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
+
         var result = await conn.QueryAsync<ArticuloDto>(
             new CommandDefinition("[dbo].[spmostrar_producto]",
+                p,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
         return result.AsList();
+
     }
 
     public async Task<IReadOnlyList<ArticuloVentaDto>> SearchForSalesAsync(string textoBuscar, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        // ✅ spbuscararticulo_venta1 REQUIERE @Idempresa
         var p = new DynamicParameters();
         p.Add("@textobuscar", textoBuscar, DbType.String);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         var result = await conn.QueryAsync<ArticuloVentaDto>(
-            new CommandDefinition(
-                "[dbo].[spbuscararticulo_venta1]",
+            new CommandDefinition("[dbo].[spbuscararticulo_venta1]",
                 p,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
@@ -52,11 +61,14 @@ public sealed class ArticuloRepository : IArticuloRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        // ✅ spbuscar_articulo1_codigo REQUIERE @Idempresa
         var p = new DynamicParameters();
         p.Add("@textobuscar", texto, DbType.String);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         var result = await conn.QueryAsync<ArticuloDto>(
-            new CommandDefinition("[dbo].[spbuscar_articulo1_codigo]", p,
+            new CommandDefinition("[dbo].[spbuscar_articulo1_codigo]",
+                p,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
@@ -68,6 +80,7 @@ public sealed class ArticuloRepository : IArticuloRepository
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         // PASO 1: Insertar Artículo cabecera
+        // ✅ spinsertar_articulo1 REQUIERE @Idempresa
         var pArt = new DynamicParameters();
         pArt.Add("@Codigo", dto.Codigo, DbType.String);
         pArt.Add("@Nombre", dto.Nombre, DbType.String);
@@ -82,6 +95,7 @@ public sealed class ArticuloRepository : IArticuloRepository
         pArt.Add("@Tipo", dto.Tipo, DbType.String);
         pArt.Add("@Categoria", dto.CategoriaAF, DbType.Int32);
         pArt.Add("@Idlogin", idLogin, DbType.Int32);
+        pArt.Add("@Idempresa", EmpresaIdInterna, DbType.Int32); // ← AGREGADO
         pArt.Add("@Maximo", dto.Maximo, DbType.Int32);
         pArt.Add("@Minimo", dto.Minimo, DbType.Int32);
         pArt.Add("@Tax", dto.Tax, DbType.Decimal);
@@ -92,8 +106,19 @@ public sealed class ArticuloRepository : IArticuloRepository
         pArt.Add("@Cta_Ingreso", dto.Cta_Ingreso, DbType.String);
         pArt.Add("@Cta_Venta", dto.Cta_VentaAF, DbType.String);
         pArt.Add("@Facturar_Sin_Existencia", dto.Facturar_Sin_Existencia, DbType.String);
-        pArt.Add("@Foto", null, DbType.Binary); // Manejo de imagen pendiente
-        pArt.Add("@Estado", "A", DbType.String);
+        // Convertir base64 a bytes si existe
+        byte[]? fotoBytes = null;
+        if (!string.IsNullOrWhiteSpace(dto.FotoBase64))
+        {
+            var base64Data = dto.FotoBase64;
+            // Remover prefijo "data:image/...;base64," si existe
+            if (base64Data.Contains(","))
+                base64Data = base64Data.Substring(base64Data.IndexOf(",") + 1);
+            fotoBytes = Convert.FromBase64String(base64Data);
+        }
+        pArt.Add("@Foto", fotoBytes, DbType.Binary);
+        // ✅ AHORA
+        pArt.Add("@Estado", dto.Estado, DbType.String);
         pArt.Add("@Idarticulo", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
         await conn.ExecuteAsync(
@@ -128,6 +153,7 @@ public sealed class ArticuloRepository : IArticuloRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        // ✅ speditar_articulo1 NO requiere @Idempresa (confirmado por query SQL)
         var p = new DynamicParameters();
         p.Add("@Idarticulo", idArticulo, DbType.Int32);
         p.Add("@Codigo", dto.Codigo, DbType.String);
@@ -150,10 +176,19 @@ public sealed class ArticuloRepository : IArticuloRepository
         p.Add("@Cta_Ingreso", dto.Cta_Ingreso, DbType.String);
         p.Add("@Cta_Venta", dto.Cta_VentaAF, DbType.String);
         p.Add("@Facturar_Sin_Existencia", dto.Facturar_Sin_Existencia, DbType.String);
-        p.Add("@Foto", null, DbType.Binary);
+        byte[]? fotoBytes = null;
+        if (!string.IsNullOrWhiteSpace(dto.FotoBase64))
+        {
+            var base64Data = dto.FotoBase64;
+            if (base64Data.Contains(","))
+                base64Data = base64Data.Substring(base64Data.IndexOf(",") + 1);
+            fotoBytes = Convert.FromBase64String(base64Data);
+        }
+        p.Add("@Foto", fotoBytes, DbType.Binary);
         p.Add("@Categoria", dto.CategoriaAF, DbType.Int32);
         p.Add("@Idlogin", idLogin, DbType.Int32);
-        p.Add("@Estado", "A", DbType.String);
+        // ✅ AHORA
+        p.Add("@Estado", dto.Estado, DbType.String);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[speditar_articulo1]", p,
@@ -165,6 +200,7 @@ public sealed class ArticuloRepository : IArticuloRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        // ✅ speliminar_articulo1 NO requiere @Idempresa (confirmado por query SQL)
         var p = new DynamicParameters();
         p.Add("@Idarticulo", idArticulo, DbType.Int32);
         p.Add("@Idlogin", idLogin, DbType.Int32);
@@ -183,18 +219,81 @@ public sealed class ArticuloRepository : IArticuloRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        // ✅ spbuscar_detalle_producto_precio NO aparece en la lista de SPs con @Idempresa
         var p = new DynamicParameters();
         p.Add("@Idarticulo", idArticulo, DbType.Int32);
         p.Add("@Idmedida", idMedida, DbType.Int32);
         p.Add("@Nombre", nombre, DbType.String);
 
         var result = await conn.QueryAsync<DetalleProductoPrecioDto>(
-            new CommandDefinition(
-                "[dbo].[spbuscar_detalle_producto_precio]",
+            new CommandDefinition("[dbo].[spbuscar_detalle_producto_precio]",
                 p,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
         return result.AsList();
+    }
+    public async Task<ArticuloDto?> GetByIdAsync(int idArticulo, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        // ❌ QUITAR: await conn.OpenAsync(ct); ← La conexión ya viene abierta
+
+        dynamic? result = await conn.QueryFirstOrDefaultAsync(
+            new CommandDefinition("[dbo].[spbuscar_articulo1_id]",
+                new { textobuscar = idArticulo },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
+        if (result == null) return null;
+
+        var dto = new ArticuloDto
+        {
+            Idarticulo = (int)result.Idarticulo,
+            Codigo = (string)result.Codigo,
+            Nombre = (string)result.Nombre,
+            Descripcion = (string?)result.Descripcion,
+            Fecha1 = result.Fecha1 != null ? (DateTime?)result.Fecha1 : null,
+            Idcategoria = (int)result.Idcategoria,
+            Idmedida = (int)result.Idmedida,
+            Costo = (decimal)result.Costo,
+            Precio = (decimal)result.Precio,
+            Comision = (decimal)result.Comision,
+            Tipo = (string)result.Tipo,
+            Categoria = result.Categoria != null ? (int?)result.Categoria : null,
+            //Balance_Inicial = result.Balance_Inicial != null ? (decimal?)result.Balance_Inicial : null,
+            Exist = (decimal)result.Exist,
+            Maximo = (int)result.Maximo,
+            Minimo = (int)result.Minimo,
+            Tax = (decimal)result.Tax,
+            IsVencimiento = result.IsVencimiento != null ? (bool)result.IsVencimiento : false,
+            Fecha_Vencimiento = result.Fecha_Vencimiento != null ? (DateTime?)result.Fecha_Vencimiento : null,
+            Cta_Inventario = result.Cta_Inventario,
+            Cta_Costo = result.Cta_Costo,
+            Cta_Ingreso = result.Cta_Ingreso,
+            Cta_VentaAF = result.Cta_VentaAF,
+            Facturar_Sin_Existencia = result.Facturar_Sin_Existencia,
+            Estado = result.Estado,
+            Existencia = result.Existencia,
+        };
+
+        byte[]? fotoBytes = result.Foto as byte[];
+        if (fotoBytes != null && fotoBytes.Length > 0)
+        {
+            dto.FotoBase64 = Convert.ToBase64String(fotoBytes);
+        }
+
+        return dto;
+    }
+    public async Task<int> GetSecuenciaAsync(string tipo, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        var result = await conn.ExecuteScalarAsync<int>(
+            new CommandDefinition("[dbo].[spsecuencia_articulo]",
+                new { Tipo = tipo },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
+        return result;
     }
 }

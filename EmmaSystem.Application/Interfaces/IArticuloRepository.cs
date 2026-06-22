@@ -15,4 +15,6 @@ public interface IArticuloRepository
         int idMedida,
         string nombre,
         CancellationToken ct = default);
+    Task<ArticuloDto?> GetByIdAsync(int idArticulo, CancellationToken ct = default);
+    Task<int> GetSecuenciaAsync(string tipo, CancellationToken ct = default);
 }

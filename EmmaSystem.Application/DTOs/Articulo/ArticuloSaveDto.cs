@@ -55,4 +55,9 @@ public sealed class ArticuloSaveDto
 
     [StringLength(20)]
     public string? Codigo_Barra { get; init; }
+    // Agregar al final de la clase, antes del cierre:
+    [StringLength(1000000)] // ~1MB máximo en base64
+    public string? FotoBase64 { get; init; }
+    [StringLength(1)]
+    public string Estado { get; init; } = "A"; // A=Activo, I=Inactivo, E=Eliminado
 }

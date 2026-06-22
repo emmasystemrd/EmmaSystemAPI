@@ -13,7 +13,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
     private readonly string _passPhrase;
-
+    private const int EmpresaIdInterna = 1;
     public ConfiguracionRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext,
@@ -95,7 +95,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         return await conn.QueryFirstOrDefaultAsync<ConfProveedorClienteDto>(
             new CommandDefinition("[dbo].[spmostrar_configuracion_proveedor_cliente]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
@@ -104,7 +104,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
         p.Add("@Idproveedor", dto.Idproveedor);
         p.Add("@Idcliente", dto.Idcliente);
         p.Add("@Idcuenta1", dto.CxP);
@@ -132,7 +132,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         var result = await conn.QueryFirstOrDefaultAsync(
             new CommandDefinition("[dbo].[spmostrar_capital]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         if (result == null) return (null, null);
@@ -145,7 +145,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[speditar_configuracion_capital]",
-                new { Idempresa = idEmpresa, Idcuenta = capital, Cuenta_Cierre = cuentaCierre },
+                new { Idempresa = EmpresaIdInterna, Idcuenta = capital, Cuenta_Cierre = cuentaCierre },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
@@ -157,7 +157,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         return await conn.QueryFirstOrDefaultAsync<ConfImpuestoDto>(
             new CommandDefinition("[dbo].[spmostrar_configuracion_impuesto]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
@@ -169,7 +169,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         return await conn.QueryFirstOrDefaultAsync<ConfEmpleadoDto>(
             new CommandDefinition("[dbo].[spmostrar_configuracion_empleado]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
@@ -181,7 +181,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         return await conn.QueryFirstOrDefaultAsync<ConfTssDto>(
             "SELECT TOP 1 * FROM Conf_TSS WHERE Idempresa = @Idempresa",
-            new { Idempresa = idEmpresa },
+            new { Idempresa = EmpresaIdInterna },
             commandType: CommandType.Text);
     }
 
@@ -193,7 +193,7 @@ public sealed class ConfiguracionRepository : IConfiguracionRepository
 
         return await conn.QueryFirstOrDefaultAsync<ConfFacturacionDto>(
             new CommandDefinition("[dbo].[spmostrar_configuracion_factura]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 

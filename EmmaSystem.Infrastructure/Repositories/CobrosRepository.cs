@@ -10,7 +10,7 @@ public sealed class CobrosRepository : ICobrosRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public CobrosRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -27,7 +27,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spmostrar_cobro1]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return rows.Select(MapToListado).ToList();
@@ -44,7 +44,7 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@TextoBuscar", texto ?? "");
         p.Add("@Columna", columna ?? "cl.Razon_Social");
         p.Add("@Adjunto", adjunto);
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_cobro1_columna]", p,
@@ -59,7 +59,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
         var row = await conn.QueryFirstOrDefaultAsync<CobroDetalleSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_cobro1_id]",
-                new { Idcobro = idCobro, Idempresa = idEmpresa },
+                new { Idcobro = idCobro, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         if (row == null) return null;
@@ -72,7 +72,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
         var row = await conn.QueryFirstOrDefaultAsync<CobroDetalleSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_cobro1_codigo]",
-                new { TextoBuscar = codigo, Idempresa = idEmpresa },
+                new { TextoBuscar = codigo, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         if (row == null) return null;
@@ -109,7 +109,7 @@ public sealed class CobrosRepository : ICobrosRepository
             p.Add("@Ref_Tarjeta", dto.Ref_Tarjeta);
             p.Add("@Devuelta", dto.Devuelta);
             p.Add("@Idlogin", idLogin);
-            p.Add("@Idempresa", idEmpresa);
+            p.Add("@Idempresa", EmpresaIdInterna);
 
             await conn.ExecuteAsync(
                 new CommandDefinition("[dbo].[spinsertar_cobro1]", p,
@@ -241,7 +241,7 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@Tipo_Tarjeta", dto.Tipo_Tarjeta, DbType.Int32);
         p.Add("@Ref_Tarjeta", dto.Ref_Tarjeta);
         p.Add("@Idlogin", idLogin);
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_avance_cliente]", p,
@@ -292,7 +292,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spmostrar_avance_cliente]",
-                new { Idempresa = idEmpresa },
+                new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return rows.Select(MapToListado).ToList();
@@ -309,7 +309,7 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@TextoBuscar", texto ?? "");
         p.Add("@Columna", columna ?? "cl.Razon_Social");
         p.Add("@Adjunto", adjunto);
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_avance_cliente_columna]", p,
@@ -328,7 +328,7 @@ public sealed class CobrosRepository : ICobrosRepository
         p.Add("@TextoBuscar", idCobro);
         p.Add("@Idpersona", idCliente);
         p.Add("@Fecha", fecha);
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         var result = await conn.QueryAsync<DetalleCobroDto>(
             new CommandDefinition("[dbo].[spmostrar_detalle_cobro1]", p,
@@ -343,7 +343,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
         return await conn.ExecuteScalarAsync<int>(
             new CommandDefinition("[dbo].[spobtener_iddocumento]",
-                new { Idempresa = idEmpresa, Tipo = tipo, No_Factura = noFactura },
+                new { Idempresa = EmpresaIdInterna, Tipo = tipo, No_Factura = noFactura },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
 
@@ -355,7 +355,7 @@ public sealed class CobrosRepository : ICobrosRepository
 
         var result = await conn.QueryAsync<CobroReporteDto>(
             new CommandDefinition("[dbo].[r_cobro1]",
-                new { Idempresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, Idusuario = idUsuario },
+                new { Idempresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2, Idusuario = idUsuario },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();

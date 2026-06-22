@@ -10,7 +10,7 @@ public sealed class DepartamentoRepository : IDepartamentoRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public DepartamentoRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -24,7 +24,7 @@ public sealed class DepartamentoRepository : IDepartamentoRepository
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         var result = await conn.QueryAsync<DepartamentoDto>(
             new CommandDefinition("[dbo].[spmostrar_departamento]", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));
@@ -38,7 +38,7 @@ public sealed class DepartamentoRepository : IDepartamentoRepository
 
         var p = new DynamicParameters();
         p.Add("@TextoBuscar", textoBuscar);
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         var result = await conn.QueryAsync<DepartamentoDto>(
             new CommandDefinition("[dbo].[spbuscar_departamento]", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));
@@ -53,7 +53,7 @@ public sealed class DepartamentoRepository : IDepartamentoRepository
         var p = new DynamicParameters();
         p.Add("@Nombre", dto.Nombre);
         p.Add("@Descripcion", dto.Descripcion, DbType.String);
-        p.Add("@Idempresa", idEmpresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_departamento]", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));

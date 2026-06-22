@@ -87,6 +87,7 @@
             // ──────────────────────────────────────────────
             // 6) Servicios de Aplicación
             // ──────────────────────────────────────────────
+            builder.Services.AddScoped<IAdminService, AdminService>();
             builder.Services.AddScoped<IAuthService, AuthService>(); // ← AGREGADO: Registro de IAuthService
                 builder.Services.AddScoped<IPermissionService, PermissionService>();
                 builder.Services.AddScoped<IDgiiService, DgiiService>();

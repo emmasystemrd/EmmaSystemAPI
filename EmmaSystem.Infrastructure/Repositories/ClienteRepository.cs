@@ -11,7 +11,7 @@ public sealed class ClienteRepository : IClienteRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
-
+    private const int EmpresaIdInterna = 1;
     public ClienteRepository(
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
@@ -25,7 +25,7 @@ public sealed class ClienteRepository : IClienteRepository
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
         var p = new DynamicParameters();
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         var result = await conn.QueryAsync<ClienteDto>(
             new CommandDefinition("[dbo].[spmostrar_cliente1]", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));
@@ -39,7 +39,7 @@ public sealed class ClienteRepository : IClienteRepository
 
         var p = new DynamicParameters();
         p.Add("@TextoBuscar", textoBuscar, DbType.String);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         var result = await conn.QueryFirstOrDefaultAsync<ClienteDetalleDto>(
             new CommandDefinition("[dbo].[spbuscar_cliente1_codigo]", p,
@@ -57,7 +57,7 @@ public sealed class ClienteRepository : IClienteRepository
                 new
                 {
                     TextoBuscar = string.IsNullOrWhiteSpace(textoBuscar) ? "" : textoBuscar.Trim(),
-                    Idempresa = idEmpresa
+                    Idempresa = EmpresaIdInterna
                 },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
@@ -70,7 +70,7 @@ public sealed class ClienteRepository : IClienteRepository
 
         var result = await conn.QueryFirstOrDefaultAsync<ClienteDto>(
             new CommandDefinition("[dbo].[spbuscar_cliente1_id]",
-                new { Idcliente = idCliente, Idempresa = idEmpresa },
+                new { Idcliente = idCliente, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result;
@@ -114,7 +114,7 @@ public sealed class ClienteRepository : IClienteRepository
         p.Add("@Idsector", dto.Idsector, DbType.Int32);
         p.Add("@Ruta", dto.Ruta, DbType.String);
         p.Add("@Idlogin", idLogin, DbType.Int32);
-        p.Add("@Idempresa", idEmpresa, DbType.Int32);
+        p.Add("@Idempresa", EmpresaIdInterna, DbType.Int32);
 
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[spinsertar_cliente1]", p, commandType: CommandType.StoredProcedure, cancellationToken: ct));
@@ -191,7 +191,7 @@ public sealed class ClienteRepository : IClienteRepository
 
         var result = await conn.QueryAsync<RetencionDto>(
             new CommandDefinition("[dbo].[spcargar_retencion]",
-                new { Idempresa = idEmpresa, Tipo = tipo ? 1 : 0 },
+                new { Idempresa = EmpresaIdInterna, Tipo = tipo ? 1 : 0 },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();
@@ -204,7 +204,7 @@ public sealed class ClienteRepository : IClienteRepository
 
         var result = await conn.QueryAsync<CuentaContableDto>(
             new CommandDefinition("[dbo].[spbuscar_cuenta_detalle]",
-                new { textobuscar = textoBuscar, Idempresa = idEmpresa },
+                new { textobuscar = textoBuscar, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();

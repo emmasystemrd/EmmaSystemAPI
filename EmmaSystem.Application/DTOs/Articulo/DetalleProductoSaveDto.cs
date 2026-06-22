@@ -10,8 +10,8 @@ public sealed class DetalleProductoSaveDto
     [StringLength(20)]
     public string? CodigoBarra { get; init; }
 
-    [Required, StringLength(20)]
-    public string Nombre { get; init; } = default!;
+    [StringLength(20)]
+    public string? Nombre { get; init; } = default!;
 
     [Required]
     public int Idmedida { get; init; }
@@ -27,4 +27,8 @@ public sealed class DetalleProductoSaveDto
 
     [Required]
     public decimal Precio { get; init; }
+
+    // ✅ AGREGAR: Existencia editable por presentación
+    [Range(0, double.MaxValue)]
+    public decimal Existencia { get; init; } = 0;
 }
