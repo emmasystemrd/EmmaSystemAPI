@@ -83,6 +83,10 @@
             builder.Services.AddScoped<IInscripcionesRepository, InscripcionesRepository>();
             builder.Services.AddScoped<IAsistenciasRepository, AsistenciasRepository>();
             builder.Services.AddScoped<ICobrosRepository, CobrosRepository>();
+            // Registrar servicios de facturación electrónica
+            builder.Services.AddScoped<IFacturacionElectronicaService, FacturacionElectronicaService>();
+            builder.Services.AddScoped<IEcfXmlRepository, EcfXmlRepository>();
+            builder.Services.AddScoped<ITokenDgiiService, TokenDgiiService>();
 
             // ──────────────────────────────────────────────
             // 6) Servicios de Aplicación

@@ -1,4 +1,5 @@
 ﻿using EmmaSystem.Application.DTOs.Articulo;
+using EmmaSystem.Application.DTOs.Asistencia;
 
 namespace EmmaSystem.Application.Interfaces;
 

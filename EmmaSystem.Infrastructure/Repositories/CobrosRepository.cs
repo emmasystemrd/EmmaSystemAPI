@@ -82,7 +82,7 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<int> InsertAsync(CobroSaveDto dto, int idLogin, int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
@@ -155,7 +155,7 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task UpdateAsync(int idCobro, CobroSaveDto dto, int idLogin, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try

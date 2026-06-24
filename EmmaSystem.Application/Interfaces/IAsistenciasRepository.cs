@@ -14,4 +14,8 @@ public interface IAsistenciasRepository
 
     Task<List<AsistenciaMatrixDto>> GetMatrixAsistenciaAsync(
         DateTime fecha1, DateTime fecha2, int idCurso, int? idDetalleCurso, int idInstructor, CancellationToken ct = default);
+
+    Task<AsistenciaFormularioDto> GetAsistenciaSemanalAsync(
+DateTime fecha1, DateTime fecha2, int idCurso, int? idDetalleCurso, int idInstructor,
+CancellationToken ct = default);
 }

@@ -100,7 +100,7 @@ public sealed class VentaRepository : IVentaRepository
     public async Task<int> InsertAsync(VentaSaveDto venta, int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
@@ -169,7 +169,7 @@ public sealed class VentaRepository : IVentaRepository
     public async Task UpdateAsync(int idVenta, VentaSaveDto venta, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+       // conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
@@ -234,7 +234,7 @@ public sealed class VentaRepository : IVentaRepository
     public async Task DeleteAsync(int idVenta, int idLogin, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
@@ -367,12 +367,28 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
-        var p = new DynamicParameters();
-        p.Add("@textobuscar", idVenta.ToString());
+        const string sql = @"
+        SELECT 
+            d.Iddetalle,
+            d.IdVenta1,
+            d.Idarticulo,
+            a.Codigo,
+            a.Nombre AS Producto,
+            d.Cantidad,
+            m.Mayor AS Medida,
+            d.Precio_Venta1,
+            d.ITBIS AS P_Itbis,
+            d.Descuento,
+            (d.Cantidad * d.Precio_Venta1) AS Subtotal,
+            (d.Cantidad * d.Precio_Venta1 * d.ITBIS) AS ITBIS
+        FROM Detalle_Venta1 d
+        INNER JOIN Detalle_Producto dp ON dp.Iddetalle = d.Idarticulo
+        INNER JOIN Articulo1 a ON a.Idarticulo = dp.Idarticulo
+        INNER JOIN Medida m ON m.Idmedida = dp.Idmedida
+        WHERE d.IdVenta1 = @IdVenta";
 
         var result = await conn.QueryAsync<VentaDetalleItemDto>(
-            new CommandDefinition("spmostrar_detalle_venta1", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(sql, new { IdVenta = idVenta }, cancellationToken: ct));
 
         return result.ToList();
     }

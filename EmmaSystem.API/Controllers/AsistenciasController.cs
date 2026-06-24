@@ -70,4 +70,32 @@ public sealed class AsistenciasController : ControllerBase
         var result = await _repo.GetMatrixAsistenciaAsync(fecha1, fecha2, idCurso, idDetalleCurso, idInstructor, ct);
         return Ok(result);
     }
+    /// <summary>
+    /// Busca si ya existe una asistencia registrada para la combinación fecha+curso+instructor
+    /// </summary>
+    [HttpGet("existing-id")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<int?>> GetExistingId(
+        [FromQuery] DateTime fecha,
+        [FromQuery] int idCurso,
+        [FromQuery] int? idDetalleCurso,
+        [FromQuery] int idInstructor,
+        CancellationToken ct)
+    {
+        var id = await _repo.GetExistingAsistenciaIdAsync(fecha, idCurso, idDetalleCurso, idInstructor, ct);
+        return Ok(id);
+    }
+    [HttpGet("semanal")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<AsistenciaFormularioDto>> GetAsistenciaSemanal(
+    [FromQuery] DateTime fecha1,
+    [FromQuery] DateTime fecha2,
+    [FromQuery] int idCurso,
+    [FromQuery] int? idDetalleCurso,
+    [FromQuery] int idInstructor,
+    CancellationToken ct)
+    {
+        var result = await _repo.GetAsistenciaSemanalAsync(fecha1, fecha2, idCurso, idDetalleCurso, idInstructor, ct);
+        return Ok(result);
+    }
 }

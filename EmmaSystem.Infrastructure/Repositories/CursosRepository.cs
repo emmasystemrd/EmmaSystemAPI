@@ -110,7 +110,7 @@ public sealed class CursosRepository : ICursosRepository
     public async Task<int> InsertAsync(CursoSaveDto curso, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
@@ -160,7 +160,7 @@ public sealed class CursosRepository : ICursosRepository
     public async Task UpdateAsync(int idCurso, CursoSaveDto curso, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+       // conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try

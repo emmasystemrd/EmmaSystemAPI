@@ -46,7 +46,7 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
         var p = new DynamicParameters();
         p.Add("@Fecha", fecha.Date);
         p.Add("@Idcurso", idCurso);
-        p.Add("@Iddetall_Curso", idDetalleCurso);
+        p.Add("@Iddetalle_Curso", idDetalleCurso);
         p.Add("@Idinstructor", idInstructor);
 
         return await conn.QueryFirstOrDefaultAsync<int?>(
@@ -57,7 +57,7 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
     public async Task<int> SaveAsistenciaAsync(AsistenciaSaveDto dto, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        conn.Open();
+        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
@@ -140,5 +140,68 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();
+    }
+    public async Task<AsistenciaFormularioDto> GetAsistenciaSemanalAsync(
+    DateTime fecha1, DateTime fecha2, int idCurso, int? idDetalleCurso, int idInstructor,
+    CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        // 1. Obtener datos del formulario
+        var curso = await conn.QueryFirstOrDefaultAsync<dynamic>(
+            "SELECT c.Curso, c.Horario, e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2 AS Docente " +
+            "FROM Curso c " +
+            "LEFT JOIN Empleado e ON e.IdEmpleado = c.Idinstructor " +
+            "WHERE c.Idcurso = @Idcurso",
+            new { Idcurso = idCurso });
+
+        // 2. Obtener logo de la empresa
+        var empresa = await conn.QueryFirstOrDefaultAsync<dynamic>(
+            "SELECT Nombre, Logo FROM Empresa WHERE Idempresa = @Idempresa",
+            new { Idempresa = _tenantContext.EmpresaId });
+
+        string logoBase64 = "";
+        if (empresa?.Logo != null)
+        {
+            byte[] logoBytes = (byte[])empresa.Logo;
+            if (logoBytes.Length > 0)
+            {
+                logoBase64 = "data:image/png;base64," + Convert.ToBase64String(logoBytes);
+            }
+        }
+
+        // 3. Calcular fechas de semanas
+        var fechasSemanas = new List<string>();
+        for (int i = 0; i < 5; i++)
+        {
+            var fechaSemana = fecha1.AddDays(i * 7);
+            fechasSemanas.Add(fechaSemana.ToString("dd/MM/yyyy"));
+        }
+
+        // 4. Obtener matriz de asistencia
+        var p = new DynamicParameters();
+        p.Add("@Fecha1", fecha1.Date);
+        p.Add("@Fecha2", fecha2.Date);
+        p.Add("@Idcurso", idCurso);
+        p.Add("@Iddetalle_Curso", idDetalleCurso ?? 0);
+        p.Add("@Idinstructor", idInstructor);
+
+        var estudiantes = (await conn.QueryAsync<AsistenciaSemanalDto>(
+            new CommandDefinition("[dbo].[spAsistencia_Semanal]", p,
+                commandType: CommandType.StoredProcedure, cancellationToken: ct))).ToList();
+
+        return new AsistenciaFormularioDto
+        {
+            Institucion = empresa?.Nombre ?? "",
+            LogoBase64 = logoBase64,
+            Disciplina = curso?.Curso ?? "",
+            Docente = curso?.Docente ?? "",
+            Dias = "Lunes y Martes", // TODO: Obtener de la BD
+            Horario = curso?.Horario ?? "",
+            Mes = fecha1.ToString("MMMM", new System.Globalization.CultureInfo("es-ES")),
+            Año = fecha1.Year,
+            FechasSemanas = fechasSemanas,
+            Estudiantes = estudiantes
+        };
     }
 }
