@@ -1,4 +1,5 @@
 ﻿using Dapper;
+using EmmaSystem.Application.DTOs.Reportes;
 using EmmaSystem.Application.DTOs.Venta;
 using EmmaSystem.Application.Interfaces;
 using EmmaSystem.Infrastructure.Data;
@@ -426,5 +427,161 @@ public sealed class VentaRepository : IVentaRepository
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return result.ToList();
+    }
+    public async Task<IReadOnlyList<VentaReporteDto>> ReporteVentasComprobanteAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, string comprobante, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        const string sql = @"
+        EXEC r_ventas_comprobante 
+            @Idempresa = @IdEmpresa,
+            @Fecha1 = @Fecha1,
+            @Fecha2 = @Fecha2,
+            @Comprobante = @Comprobante";
+
+        var result = await conn.QueryAsync<VentaReporteDto>(
+            new CommandDefinition(sql, new
+            {
+                IdEmpresa = idEmpresa,
+                Fecha1 = fecha1,
+                Fecha2 = fecha2,
+                Comprobante = comprobante ?? ""
+            }, cancellationToken: ct));
+
+        return result.ToList();
+    }
+    public async Task<IReadOnlyList<ArticuloVendidoReporteDto>> ReporteArticulosVendidosAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        const string sql = @"
+        EXEC r_articulos_vendidos 
+            @Idempresa = @IdEmpresa,
+            @fecha1 = @Fecha1,
+            @fecha2 = @Fecha2";
+
+        var result = await conn.QueryAsync<ArticuloVendidoReporteDto>(
+            new CommandDefinition(sql, new
+            {
+                IdEmpresa = idEmpresa,
+                Fecha1 = fecha1,
+                Fecha2 = fecha2
+            }, cancellationToken: ct));
+
+        return result.ToList();
+    }
+    // ═══ REPORTES ADICIONALES ═══
+
+    public async Task<IReadOnlyList<VentaDepartamentoReporteDto>> ReporteVentaDepartamentoAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idDepartamento, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_ventas_detalle @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Iddepartamento=@IdDepartamento";
+        var result = await conn.QueryAsync<VentaDepartamentoReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdDepartamento = idDepartamento }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<UtilidadProductoReporteDto>> ReporteUtilidadProductoAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_articulos_utilidad @Idempresa=@IdEmpresa, @fecha1=@Fecha1, @fecha2=@Fecha2";
+        var result = await conn.QueryAsync<UtilidadProductoReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2 }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<ComisionVentaReporteDto>> ReporteComisionVentaAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_comision_venta @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idempresa=@IdEmpresa";
+        var result = await conn.QueryAsync<ComisionVentaReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, IdEmpresa = idEmpresa }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<ComisionProductoReporteDto>> ReporteComisionProductoAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idEmpleado, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_comision_producto @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idempleado=@IdEmpleado, @Idempresa=@IdEmpresa";
+        var result = await conn.QueryAsync<ComisionProductoReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, IdEmpleado = idEmpleado, IdEmpresa = idEmpresa }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<CotizacionReporteDto>> ReporteCotizacionesAsync(DateTime fecha1, DateTime fecha2, string? proceso, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC RListado_Cotizacion @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Proceso=@Proceso";
+        var result = await conn.QueryAsync<CotizacionReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, Proceso = proceso ?? "" }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<PedidoReporteDto>> ReportePedidosAsync(DateTime fecha1, DateTime fecha2, string? proceso, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC RListado_Pedido @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Proceso=@Proceso";
+        var result = await conn.QueryAsync<PedidoReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, Proceso = proceso ?? "" }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<ConduceReporteDto>> ReporteConduceAsync(DateTime fecha1, DateTime fecha2, int? idCliente, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC RListado_Conduce @Idcliente=@IdCliente, @Fecha1=@Fecha1, @Fecha2=@Fecha2";
+        var result = await conn.QueryAsync<ConduceReporteDto>(new CommandDefinition(sql, new { IdCliente = idCliente ?? 0, Fecha1 = fecha1, Fecha2 = fecha2 }, cancellationToken: ct));
+        return result.ToList();
+    }
+    // ═══ REPORTES DE CLIENTES ═══
+
+    public async Task<IReadOnlyList<SaldosAntiguedadReporteDto>> ReporteSaldosAntiguedadAsync(int idEmpresa, DateTime fecha, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_clientes_resumen @Idempresa=@IdEmpresa, @Fecha=@Fecha";
+        var result = await conn.QueryAsync<SaldosAntiguedadReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha = fecha }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<MovimientoClienteReporteDto>> ReporteMovimientoClienteAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idCliente, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_movimiento_clientes @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idcliente=@IdCliente";
+        var result = await conn.QueryAsync<MovimientoClienteReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdCliente = idCliente }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<IReadOnlyList<ReciboCobroReporteDto>> ReporteRecibosCobroAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int? idUsuario, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = "EXEC r_cobro1 @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idusuario=@IdUsuario";
+        var result = await conn.QueryAsync<ReciboCobroReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdUsuario = idUsuario ?? 0 }, cancellationToken: ct));
+        return result.ToList();
+    }
+
+    public async Task<EstadoCuentaReporteDto?> ReporteEstadoCuentaAsync(int idEmpresa, int idCliente, DateTime fecha, DateTime fecha1, DateTime fecha2, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        // Obtener datos del cliente
+        const string sqlCliente = "EXEC r_datos_cliente @TextoBuscar=@IdCliente, @Idempresa=@IdEmpresa";
+        var cliente = await conn.QueryFirstOrDefaultAsync<EstadoCuentaReporteDto>(new CommandDefinition(sqlCliente, new { IdCliente = idCliente, IdEmpresa = idEmpresa }, cancellationToken: ct));
+
+        if (cliente == null) return null;
+
+        // Obtener saldos por antigüedad
+        const string sqlSaldos = "EXEC r_saldos_antiguedad_cliente @Idcliente=@IdCliente, @Fecha=@Fecha";
+        var saldos = await conn.QueryFirstOrDefaultAsync(new CommandDefinition(sqlSaldos, new { IdCliente = idCliente, Fecha = fecha }, cancellationToken: ct));
+
+        if (saldos != null)
+        {
+            cliente.No_Vencida = saldos.No_Vencida ?? 0;
+            cliente.dias_30 = saldos.dias_30 ?? 0;
+            cliente.dias_60 = saldos.dias_60 ?? 0;
+            cliente.dias_90 = saldos.dias_90 ?? 0;
+            cliente.dias_120 = saldos.dias_120 ?? 0;
+            cliente.mas_120 = saldos.mas_120 ?? 0;
+        }
+
+        // Obtener movimientos
+        const string sqlMovimientos = "EXEC r_movimiento_clientes @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idcliente=@IdCliente";
+        var movimientos = await conn.QueryAsync<MovimientoClienteReporteDto>(new CommandDefinition(sqlMovimientos, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdCliente = idCliente }, cancellationToken: ct));
+        cliente.Movimientos = movimientos.ToList();
+
+        return cliente;
     }
 }

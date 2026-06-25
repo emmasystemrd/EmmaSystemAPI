@@ -1,4 +1,5 @@
-﻿using EmmaSystem.Application.DTOs.Venta;
+﻿using EmmaSystem.Application.DTOs.Reportes;
+using EmmaSystem.Application.DTOs.Venta;
 
 namespace EmmaSystem.Application.Interfaces;
 
@@ -103,4 +104,23 @@ public interface IVentaRepository
     // === REPORTES DE IMPRESIÓN ===
     Task<FacturaReporteDto?> GetFacturaReporteAsync(string noFactura, int idEmpresa, CancellationToken ct = default);
     Task<IReadOnlyList<FacturaDetalleReporteDto>> GetFacturaDetalleReporteAsync(int idVenta, CancellationToken ct = default);
+
+    Task<IReadOnlyList<VentaReporteDto>> ReporteVentasComprobanteAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, string comprobante, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ArticuloVendidoReporteDto>> ReporteArticulosVendidosAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, CancellationToken ct = default);
+
+    // ═══ REPORTES ADICIONALES ═══
+    Task<IReadOnlyList<VentaDepartamentoReporteDto>> ReporteVentaDepartamentoAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idDepartamento, CancellationToken ct = default);
+    Task<IReadOnlyList<UtilidadProductoReporteDto>> ReporteUtilidadProductoAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, CancellationToken ct = default);
+    Task<IReadOnlyList<ComisionVentaReporteDto>> ReporteComisionVentaAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, CancellationToken ct = default);
+    Task<IReadOnlyList<ComisionProductoReporteDto>> ReporteComisionProductoAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idEmpleado, CancellationToken ct = default);
+    Task<IReadOnlyList<CotizacionReporteDto>> ReporteCotizacionesAsync(DateTime fecha1, DateTime fecha2, string? proceso, CancellationToken ct = default);
+    Task<IReadOnlyList<PedidoReporteDto>> ReportePedidosAsync(DateTime fecha1, DateTime fecha2, string? proceso, CancellationToken ct = default);
+    Task<IReadOnlyList<ConduceReporteDto>> ReporteConduceAsync(DateTime fecha1, DateTime fecha2, int? idCliente, CancellationToken ct = default);
+
+    // ═══ REPORTES DE CLIENTES ═══
+    Task<IReadOnlyList<SaldosAntiguedadReporteDto>> ReporteSaldosAntiguedadAsync(int idEmpresa, DateTime fecha, CancellationToken ct = default);
+    Task<IReadOnlyList<MovimientoClienteReporteDto>> ReporteMovimientoClienteAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idCliente, CancellationToken ct = default);
+    Task<IReadOnlyList<ReciboCobroReporteDto>> ReporteRecibosCobroAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int? idUsuario, CancellationToken ct = default);
+    Task<EstadoCuentaReporteDto?> ReporteEstadoCuentaAsync(int idEmpresa, int idCliente, DateTime fecha, DateTime fecha1, DateTime fecha2, CancellationToken ct = default);
 }
