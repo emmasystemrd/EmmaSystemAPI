@@ -402,4 +402,220 @@ public sealed partial class AdminService : IAdminService
 
         return resultado ?? "CLI001";
     }
+    // ═══════════════════════════════════════════════════════
+    // REGISTRO DE BD EXISTENTE (MIGRACIÓN)
+    // ═══════════════════════════════════════════════════════
+    public async Task<RegistrarClienteResponseDto> RegistrarBDExistenteAsync(
+        RegistrarBDExistenteRequestDto request, CancellationToken ct = default)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        await conn.OpenAsync(ct);
+
+        // ═══ VALIDACIONES ═══
+        var errores = new List<string>();
+
+        // 1. Validar que la BD exista en el servidor
+        var bdExiste = await conn.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                "SELECT COUNT(*) FROM sys.databases WHERE name = @Nombre",
+                new { Nombre = request.NombreBD },
+                cancellationToken: ct));
+
+        if (bdExiste == 0)
+            errores.Add($"La base de datos '{request.NombreBD}' no existe en el servidor.");
+
+        // 2. Validar que la BD tenga tabla Empresa (es una BD de EmmaSystem)
+        if (bdExiste > 0)
+        {
+            try
+            {
+                var connectionString = $"Server={request.ServidorBD};Database={request.NombreBD};User Id={SqlUser};Password={SqlPassword};TrustServerCertificate=True;";
+                using var bdConn = new SqlConnection(connectionString);
+                await bdConn.OpenAsync(ct);
+
+                var tablaExiste = await bdConn.ExecuteScalarAsync<int>(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Empresa'");
+
+                if (tablaExiste == 0)
+                    errores.Add($"La base de datos '{request.NombreBD}' no parece ser una base de datos de EmmaSystem (no tiene tabla Empresa).");
+            }
+            catch (Exception ex)
+            {
+                errores.Add($"No se pudo conectar a la base de datos '{request.NombreBD}': {ex.Message}");
+            }
+        }
+
+        // 3. Validar email admin único
+        if (!string.IsNullOrWhiteSpace(request.EmailAdmin))
+        {
+            var emailExiste = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM usuarios_central WHERE Email = @Email AND Estado = 1",
+                    new { Email = request.EmailAdmin.Trim().ToLower() },
+                    cancellationToken: ct));
+
+            if (emailExiste > 0)
+                errores.Add($"El email '{request.EmailAdmin}' ya está registrado.");
+        }
+
+        // 4. Validar RNC único
+        if (!string.IsNullOrWhiteSpace(request.RNC))
+        {
+            var rncExiste = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM clientes WHERE RNC = @RNC AND Estado = 1",
+                    new { RNC = request.RNC },
+                    cancellationToken: ct));
+
+            if (rncExiste > 0)
+                errores.Add($"El RNC '{request.RNC}' ya está registrado.");
+        }
+
+        // 5. Validar plan activo
+        if (request.IdPlan <= 0)
+        {
+            errores.Add("Debe seleccionar un plan.");
+        }
+        else
+        {
+            var planActivo = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM planes WHERE IdPlan = @IdPlan AND Estado = 1",
+                    new { IdPlan = request.IdPlan },
+                    cancellationToken: ct));
+
+            if (planActivo == 0)
+                errores.Add("El plan seleccionado no existe o no está activo.");
+        }
+
+        // 6. Validar contraseña
+        if (string.IsNullOrWhiteSpace(request.PasswordAdmin) || request.PasswordAdmin.Length < 6)
+            errores.Add("La contraseña debe tener mínimo 6 caracteres.");
+
+        if (errores.Count > 0)
+            throw new ArgumentException(string.Join("; ", errores));
+
+        // ═══ REGISTRO ═══
+        using var transaction = conn.BeginTransaction();
+
+        try
+        {
+            // 1. Crear Cliente + Salt
+            var saltBytes = RandomNumberGenerator.GetBytes(64);
+            var codigoCliente = await GenerarCodigoClienteAsync(conn, transaction, ct);
+
+            const string sqlCliente = @"
+            INSERT INTO clientes (CodigoCliente, RazonSocial, RNC, CorreoPrincipal, Telefono, Estado, SaltCifrado)
+            VALUES (@CodigoCliente, @RazonSocial, @RNC, @CorreoPrincipal, @Telefono, 1, @SaltCifrado);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+
+            var idCliente = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(sqlCliente,
+                    new
+                    {
+                        CodigoCliente = codigoCliente,
+                        request.RazonSocial,
+                        request.RNC,
+                        CorreoPrincipal = request.CorreoPrincipal.Trim().ToLower(),
+                        request.Telefono,
+                        SaltCifrado = saltBytes
+                    },
+                    transaction: transaction, cancellationToken: ct));
+
+            // 2. Crear Usuario Central
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.PasswordAdmin);
+
+            const string sqlUsuario = @"
+            INSERT INTO usuarios_central (IdCliente, Email, PasswordHash, NombreCompleto, EsSuperAdmin, Estado)
+            VALUES (@IdCliente, @Email, @PasswordHash, @NombreCompleto, 1, 1);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+
+            var idUsuarioCentral = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(sqlUsuario,
+                    new
+                    {
+                        IdCliente = idCliente,
+                        Email = request.EmailAdmin.Trim().ToLower(),
+                        PasswordHash = passwordHash,
+                        NombreCompleto = request.NombreCompletoAdmin
+                    },
+                    transaction: transaction, cancellationToken: ct));
+
+            // 3. Crear Licencia
+            var fechaInicio = DateTime.UtcNow.Date;
+            var fechaVencimiento = fechaInicio.AddYears(1);
+            var fechaGracia = fechaVencimiento.AddDays(15);
+
+            const string sqlLicencia = @"
+            INSERT INTO licencias (IdCliente, IdPlan, EstadoLicencia, FechaInicio, FechaVencimiento, FechaGracia)
+            VALUES (@IdCliente, @IdPlan, 1, @FechaInicio, @FechaVencimiento, @FechaGracia);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+
+            var idLicencia = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(sqlLicencia,
+                    new
+                    {
+                        IdCliente = idCliente,
+                        request.IdPlan,
+                        FechaInicio = fechaInicio,
+                        FechaVencimiento = fechaVencimiento,
+                        FechaGracia = fechaGracia
+                    },
+                    transaction: transaction, cancellationToken: ct));
+
+            // 4. Generar cadena de conexión y cifrar
+            var connectionString = $"Server={request.ServidorBD};Database={request.NombreBD};User Id={SqlUser};Password={SqlPassword};TrustServerCertificate=True;";
+            byte[] iv;
+            var cadenaCifrada = _cifradoService.Cifrar(connectionString, saltBytes, out iv);
+
+            // 5. Crear Empresa Contratada (sin crear BD, solo registrar)
+            const string sqlEmpresa = @"
+            INSERT INTO empresas_contratadas
+                (IdCliente, NombreEmpresa, NombreBD, ServidorBD, CadenaConexionEnc, VectorIV, Estado, EsEmpresaDefault, RncCedula, Ambiente)
+            VALUES
+                (@IdCliente, @NombreEmpresa, @NombreBD, @ServidorBD, @CadenaConexionEnc, @VectorIV, 1, 1, @RncCedula, 3);
+            SELECT CAST(SCOPE_IDENTITY() AS INT);";
+
+            var idEmpresa = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(sqlEmpresa,
+                    new
+                    {
+                        IdCliente = idCliente,
+                        NombreEmpresa = request.NombreEmpresa,
+                        NombreBD = request.NombreBD,
+                        ServidorBD = request.ServidorBD,
+                        CadenaConexionEnc = cadenaCifrada,
+                        VectorIV = iv,
+                        RncCedula = request.RncCedula
+                    },
+                    transaction: transaction, cancellationToken: ct));
+
+            // 6. Asignar Empresa al Usuario Central
+            const string sqlAsignacion = @"
+            INSERT INTO usuario_empresas (IdUsuarioCentral, IdEmpresa)
+            VALUES (@IdUsuarioCentral, @IdEmpresa);";
+
+            await conn.ExecuteAsync(
+                new CommandDefinition(sqlAsignacion,
+                    new { IdUsuarioCentral = idUsuarioCentral, IdEmpresa = idEmpresa },
+                    transaction: transaction, cancellationToken: ct));
+
+            transaction.Commit();
+
+            return new RegistrarClienteResponseDto
+            {
+                IdCliente = idCliente,
+                CodigoCliente = codigoCliente,
+                IdUsuarioCentral = idUsuarioCentral,
+                IdLicencia = idLicencia,
+                IdEmpresa = idEmpresa,
+                Mensaje = $"Cliente '{request.RazonSocial}' registrado con empresa existente '{request.NombreEmpresa}'."
+            };
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+    }
 }

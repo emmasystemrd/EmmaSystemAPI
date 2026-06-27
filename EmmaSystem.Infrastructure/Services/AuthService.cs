@@ -7,18 +7,22 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-
+using System.Security.Cryptography;
 namespace EmmaSystem.Infrastructure.Services;
 
 public class AuthService : IAuthService
 {
     private readonly AuthRepository _authRepo;
     private readonly IConfiguration _config;
-
-    public AuthService(AuthRepository authRepo, IConfiguration config)
+    private readonly SesionRepository _sesionRepo; // ← AGREGAR
+    private readonly ISesionService _sesionService; // ← AGREGAR
+    public AuthService(AuthRepository authRepo, IConfiguration config,
+        SesionRepository sesionRepo, ISesionService sesionService) // ← MODIFICAR
     {
         _authRepo = authRepo ?? throw new ArgumentNullException(nameof(authRepo));
         _config = config ?? throw new ArgumentNullException(nameof(config));
+        _sesionRepo = sesionRepo ?? throw new ArgumentNullException(nameof(sesionRepo));
+        _sesionService = sesionService ?? throw new ArgumentNullException(nameof(sesionService));
     }
 
     // ──────────────────────────────────────────────
@@ -42,21 +46,53 @@ public class AuthService : IAuthService
         if (!BCrypt.Net.BCrypt.Verify(request.Password, usuarioCentral.PasswordHash))
             throw new EmmaSystemException("Credenciales inválidas.", 401, "AUTH_INVALID");
 
-        // 3. Obtener empresas disponibles del cliente
+        // 3. ✅ NUEVO: Validar sesiones simultáneas
+        var (puedeIniciar, mensajeSesion) = await _sesionService.ValidarSesionSimultaneaAsync(usuarioCentral.IdCliente, ct);
+        if (!puedeIniciar)
+        {
+            throw new EmmaSystemException(mensajeSesion, 403, "AUTH_MAX_CONCURRENTES");
+        }
+
+        // 4. Obtener empresas disponibles del cliente
         var empresas = await _authRepo.GetEmpresasByClienteAsync(usuarioCentral.IdCliente, ct);
 
         if (empresas.Count == 0)
             throw new EmmaSystemException("No tiene empresas activas asignadas.", 403, "AUTH_NO_EMPRESAS");
 
-        // 4. Actualizar último acceso
+        // 5. Actualizar último acceso
         await _authRepo.UpdateUltimoAccesoCentralAsync(usuarioCentral.IdUsuarioCentral, ct);
 
-        // 5. Generar token central (sin contexto de empresa aún)
+        // 6. Generar token central (sin contexto de empresa aún)
         var (token, expira) = BuildJwtCentral(usuarioCentral);
 
+        // 6.1 ✅ NUEVO: Registrar sesión activa
+        var ipAddress = "unknown"; // Se obtendrá del HttpContext en el controller
+        var userAgent = "EmmaSystem Desktop";
+        await _sesionService.RegistrarSesionAsync(
+            usuarioCentral.IdUsuarioCentral,
+            usuarioCentral.IdCliente,
+            null, // Aún no hay empresa seleccionada
+            token,
+            ipAddress,
+            userAgent,
+            ct);
+
+        // 7. Generar clave secreta para validación offline
+        var secretKey = new byte[256];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(secretKey);
+        }
+
+        // 8. Guardar clave secreta en la base de datos
+        await _authRepo.UpdateSecretKeyAsync(usuarioCentral.IdCliente, secretKey, ct);
+
+        // 9. Retornar respuesta
         return new LoginCentralResponseDto
         {
             Token = token,
+            IdCliente = usuarioCentral.IdCliente,
+            SecretKey = secretKey,
             NombreCliente = usuarioCentral.NombreCompleto,
             Empresas = empresas.ToList(),
             ExpiresAt = expira,
@@ -255,5 +291,9 @@ public class AuthService : IAuthService
             signingCredentials: creds);
 
         return (new JwtSecurityTokenHandler().WriteToken(token), expira);
+    }
+    public async Task<bool> ValidarEmpresaDeClienteAsync(int idCliente, int idEmpresa, CancellationToken ct)
+    {
+        return await _authRepo.ValidarEmpresaDeClienteAsync(idCliente, idEmpresa, ct);
     }
 }

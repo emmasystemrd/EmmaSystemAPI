@@ -18,4 +18,5 @@ public interface IAuthService
     /// Login directo a una empresa específica (usuario operativo).
     /// </summary>
     Task<SeleccionEmpresaResponseDto> LoginEmpresaAsync(LoginEmpresaRequestDto request, CancellationToken ct = default);
+    Task<bool> ValidarEmpresaDeClienteAsync(int idCliente, int idEmpresa, CancellationToken ct);
 }

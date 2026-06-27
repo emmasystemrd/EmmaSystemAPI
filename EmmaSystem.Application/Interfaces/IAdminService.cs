@@ -17,4 +17,11 @@ public interface IAdminService
     /// </summary>
     Task<RegistrarClienteResponseDto> RegistrarClienteAsync(
         RegistrarClienteRequestDto request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Registra un cliente con una base de datos existente (migración).
+    /// Valida que la BD exista y pertenezca a EmmaSystem.
+    /// </summary>
+    Task<RegistrarClienteResponseDto> RegistrarBDExistenteAsync(
+        RegistrarBDExistenteRequestDto request, CancellationToken ct = default);
 }

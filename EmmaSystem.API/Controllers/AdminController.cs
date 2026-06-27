@@ -58,4 +58,28 @@ public class AdminController : ControllerBase
             return StatusCode(500, new { message = $"Error inesperado al registrar cliente: {ex.Message}" });
         }
     }
+    /// <summary>
+    /// Registra un cliente con una base de datos existente (migración).
+    /// Valida que la BD exista y pertenezca a EmmaSystem.
+    /// </summary>
+    [HttpPost("registrar-bd-existente")]
+    [AllowAnonymous]
+    public async Task<ActionResult<RegistrarClienteResponseDto>> RegistrarBDExistente(
+        [FromBody] RegistrarBDExistenteRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _adminService.RegistrarBDExistenteAsync(request, cancellationToken);
+            return Created($"/api/admin/clientes/{response.IdCliente}", response);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error inesperado al registrar BD existente: {ex.Message}" });
+        }
+    }
 }

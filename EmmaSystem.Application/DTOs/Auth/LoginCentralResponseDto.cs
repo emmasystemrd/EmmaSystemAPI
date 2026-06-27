@@ -4,6 +4,8 @@ namespace EmmaSystem.Application.DTOs.Auth;
 public class LoginCentralResponseDto
 {
     public string Token { get; set; } = string.Empty;
+    public int IdCliente { get; set; } // ← AGREGADO
+    public byte[] SecretKey { get; set; } = Array.Empty<byte>(); // ← AGREGADO
     public string NombreCliente { get; set; } = string.Empty;
     public List<EmpresaDisponibleDto> Empresas { get; set; } = new();
     public DateTime ExpiresAt { get; set; }

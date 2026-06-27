@@ -87,13 +87,16 @@
             builder.Services.AddScoped<IFacturacionElectronicaService, FacturacionElectronicaService>();
             builder.Services.AddScoped<IEcfXmlRepository, EcfXmlRepository>();
             builder.Services.AddScoped<ITokenDgiiService, TokenDgiiService>();
+            builder.Services.AddScoped<ILicenciaService, LicenciaService>(); // ← AGREGADO
 
             // ──────────────────────────────────────────────
             // 6) Servicios de Aplicación
             // ──────────────────────────────────────────────
             builder.Services.AddScoped<IAdminService, AdminService>();
             builder.Services.AddScoped<IAuthService, AuthService>(); // ← AGREGADO: Registro de IAuthService
-                builder.Services.AddScoped<IPermissionService, PermissionService>();
+            builder.Services.AddScoped<SesionRepository>();
+            builder.Services.AddScoped<ISesionService, SesionService>();
+            builder.Services.AddScoped<IPermissionService, PermissionService>();
                 builder.Services.AddScoped<IDgiiService, DgiiService>();
 
                 // ──────────────────────────────────────────────

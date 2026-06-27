@@ -282,4 +282,15 @@ public sealed class AuthRepository
         return result ?? throw new InvalidOperationException(
             $"No se encontró ClienteId para Empresa {idEmpresa}");
     }
+    /// <summary>
+    /// Actualiza la clave secreta del cliente para validación offline
+    /// </summary>
+    public async Task UpdateSecretKeyAsync(int idCliente, byte[] secretKey, CancellationToken ct)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        await conn.OpenAsync(ct);
+
+        const string sql = "UPDATE clientes SET SecretKey = @Key WHERE IdCliente = @Id";
+        await conn.ExecuteAsync(sql, new { Key = secretKey, Id = idCliente });
+    }
 }

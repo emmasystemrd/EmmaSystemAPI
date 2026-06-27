@@ -128,5 +128,14 @@ public sealed class EmpresaController : ControllerBase
                 }
             });
         }
+
+    }
+
+    // DTO
+    public class EmpresaConexionDto
+    {
+        public int IdEmpresa { get; set; }
+        public string NombreEmpresa { get; set; } = string.Empty;
+        public string CadenaConexion { get; set; } = string.Empty;
     }
 }
