@@ -293,4 +293,34 @@ public sealed class AuthRepository
         const string sql = "UPDATE clientes SET SecretKey = @Key WHERE IdCliente = @Id";
         await conn.ExecuteAsync(sql, new { Key = secretKey, Id = idCliente });
     }
+    public async Task<byte[]?> GetSecretKeyAsync(int idCliente, CancellationToken ct)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        await conn.OpenAsync(ct);
+
+        const string sql = "SELECT SecretKey FROM clientes WHERE IdCliente = @IdCliente AND Estado = 1";
+        return await conn.QueryFirstOrDefaultAsync<byte[]?>(sql, new { IdCliente = idCliente });
+    }
+
+    public async Task<UsuarioCentralRow?> GetUsuarioCentralByClienteIdAsync(int idCliente, CancellationToken ct)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        await conn.OpenAsync(ct);
+
+        const string sql = @"
+    SELECT TOP 1
+        IdUsuarioCentral,
+        IdCliente,
+        Email,
+        PasswordHash,
+        NombreCompleto,
+        EsSuperAdmin,
+        Estado
+    FROM usuarios_central
+    WHERE IdCliente = @IdCliente AND Estado = 1
+    ORDER BY IdUsuarioCentral";
+
+        return await conn.QueryFirstOrDefaultAsync<UsuarioCentralRow>(
+            new CommandDefinition(sql, new { IdCliente = idCliente }, cancellationToken: ct));
+    }
 }

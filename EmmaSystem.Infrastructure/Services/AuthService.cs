@@ -296,4 +296,43 @@ public class AuthService : IAuthService
     {
         return await _authRepo.ValidarEmpresaDeClienteAsync(idCliente, idEmpresa, ct);
     }
+    // ──────────────────────────────────────────────
+    // RENOVACIÓN SILENCIOSA DE TOKEN
+    // ──────────────────────────────────────────────
+    public async Task<TokenRenovadoDto?> RenovarTokenAsync(int idCliente, byte[] secretKey, CancellationToken ct)
+    {
+        // 1. Verificar que el SecretKey coincide con el almacenado
+        var storedKey = await _authRepo.GetSecretKeyAsync(idCliente, ct);
+
+        if (storedKey == null || storedKey.Length != secretKey.Length)
+            return null;
+
+        // Comparación segura (evita timing attacks)
+        bool keyMatch = true;
+        for (int i = 0; i < storedKey.Length; i++)
+        {
+            if (storedKey[i] != secretKey[i])
+            {
+                keyMatch = false;
+                break;
+            }
+        }
+
+        if (!keyMatch)
+            return null;
+
+        // 2. Obtener datos del usuario central para generar el nuevo token
+        var usuarioCentral = await _authRepo.GetUsuarioCentralByClienteIdAsync(idCliente, ct);
+        if (usuarioCentral == null || usuarioCentral.Estado != 1)
+            return null;
+
+        // 3. ✅ USAR EL MÉTODO BuildJwtCentral EXISTENTE (ya genera el token correctamente)
+        var (token, expira) = BuildJwtCentral(usuarioCentral);
+
+        return new TokenRenovadoDto
+        {
+            Token = token,
+            ExpiresAt = expira
+        };
+    }
 }

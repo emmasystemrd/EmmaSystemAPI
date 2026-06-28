@@ -98,11 +98,12 @@
             builder.Services.AddScoped<ISesionService, SesionService>();
             builder.Services.AddScoped<IPermissionService, PermissionService>();
                 builder.Services.AddScoped<IDgiiService, DgiiService>();
-
-                // ──────────────────────────────────────────────
-                // 7) Filtros Globales
-                // ──────────────────────────────────────────────
-                builder.Services.AddScoped<PermissionAuthorizationFilter>();
+            // Registrar el servicio de versiones
+            builder.Services.AddScoped<IVersionService, VersionService>();
+            // ──────────────────────────────────────────────
+            // 7) Filtros Globales
+            // ──────────────────────────────────────────────
+            builder.Services.AddScoped<PermissionAuthorizationFilter>();
 
                 // ──────────────────────────────────────────────
                 // 8) Autenticación JWT

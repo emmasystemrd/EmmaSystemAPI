@@ -1,5 +1,4 @@
 ﻿using EmmaSystem.Application.DTOs.Auth;
-
 namespace EmmaSystem.Application.Interfaces;
 
 public interface IAuthService
@@ -19,4 +18,5 @@ public interface IAuthService
     /// </summary>
     Task<SeleccionEmpresaResponseDto> LoginEmpresaAsync(LoginEmpresaRequestDto request, CancellationToken ct = default);
     Task<bool> ValidarEmpresaDeClienteAsync(int idCliente, int idEmpresa, CancellationToken ct);
+    Task<TokenRenovadoDto?> RenovarTokenAsync(int idCliente, byte[] secretKey, CancellationToken ct = default);
 }

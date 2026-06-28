@@ -659,18 +659,18 @@ SELECT
     name,
     definition
 FROM sys.check_constraints
-WHERE name = 'CK_empresas_contratadas_Estado';
+WHERE name = 'CK_empresas_Estado';
 GO
 
 -- 2. Eliminar la restricción antigua
 IF EXISTS (
     SELECT 1 
     FROM sys.check_constraints 
-    WHERE name = 'CK_empresas_contratadas_Estado'
+    WHERE name = 'CK_empresas_Estado'
 )
 BEGIN
     ALTER TABLE empresas_contratadas 
-    DROP CONSTRAINT CK_empresas_contratadas_Estado;
+    DROP CONSTRAINT CK_empresas_Estado;
     
     PRINT '✅ Restricción antigua eliminada';
 END
@@ -678,7 +678,7 @@ GO
 
 -- 3. Crear nueva restricción que permita 0 y 1
 ALTER TABLE empresas_contratadas
-ADD CONSTRAINT CK_empresas_contratadas_Estado 
+ADD CONSTRAINT CK_empresas_Estado 
 CHECK (Estado IN (0, 1));
 
 PRINT '✅ Nueva restricción creada (permite 0 y 1)';
@@ -689,7 +689,7 @@ SELECT
     name,
     definition
 FROM sys.check_constraints
-WHERE name = 'CK_empresas_contratadas_Estado';
+WHERE name = 'CK_empresas_Estado';
 GO
 
 -- 5. Verificar valores actuales de Estado

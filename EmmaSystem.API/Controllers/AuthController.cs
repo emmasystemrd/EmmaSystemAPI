@@ -557,7 +557,41 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = $"Error al obtener lista de empresas: {ex.Message}" });
         }
     }
+    // ──────────────────────────────────────────────
+    // RENOVACIÓN SILENCIOSA DE TOKEN
+    // ──────────────────────────────────────────────
+    [HttpPost("renovar-token")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RenovarToken([FromBody] RenovarTokenRequest request, CancellationToken ct)
+    {
+        try
+        {
+            if (request.IdCliente <= 0 || request.SecretKey == null || request.SecretKey.Length == 0)
+                return BadRequest(new { message = "Datos de renovación inválidos." });
 
+            var resultado = await _authService.RenovarTokenAsync(request.IdCliente, request.SecretKey, ct);
+
+            if (resultado == null)
+                return Unauthorized(new { message = "No se pudo renovar el token. Credenciales inválidas." });
+
+            return Ok(new
+            {
+                token = resultado.Token,
+                expiresAt = resultado.ExpiresAt,
+                message = "Token renovado exitosamente."
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error al renovar token: {ex.Message}" });
+        }
+    }
+
+    public class RenovarTokenRequest
+    {
+        public int IdCliente { get; set; }
+        public byte[] SecretKey { get; set; } = Array.Empty<byte>();
+    }
     // DTO para la respuesta
     public class EmpresaDisponibleDto
     {
