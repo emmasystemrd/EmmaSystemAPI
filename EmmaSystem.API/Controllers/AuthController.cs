@@ -35,15 +35,15 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("login/central")]
     public async Task<ActionResult<LoginCentralResponseDto>> LoginCentral(
-    [FromBody] LoginCentralRequestDto request,
-    CancellationToken cancellationToken)
+      [FromBody] LoginCentralRequestDto request,
+      CancellationToken cancellationToken)
     {
         try
         {
+            // Capturar IP real del cliente
+            request.IPAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
             var response = await _authService.LoginCentralAsync(request, cancellationToken);
-
-           
-
             return Ok(response);
         }
         catch (UnauthorizedAccessException ex)

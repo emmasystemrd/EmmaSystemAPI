@@ -29,30 +29,23 @@ public class SesionService : ISesionService
     }
 
     public async Task RegistrarSesionAsync(int idUsuarioCentral, int idCliente, int? idEmpresa,
-        string token, string ipAddress, string userAgent, CancellationToken ct)
-    {
-        await _sesionRepo.RegistrarSesionAsync(idUsuarioCentral, idCliente, idEmpresa,
-            token, ipAddress, userAgent, ct);
-    }
+        string token, string ipAddress, string userAgent, string deviceId, string nombreEquipo,
+        CancellationToken ct)
+        => await _sesionRepo.RegistrarSesionAsync(idUsuarioCentral, idCliente, idEmpresa,
+            token, ipAddress, userAgent, deviceId, nombreEquipo, ct);
 
     public async Task HeartbeatAsync(string token, CancellationToken ct)
     {
         var actualizado = await _sesionRepo.ActualizarUltimoActividadAsync(token, ct);
         if (!actualizado)
-        {
             throw new InvalidOperationException("Sesión no encontrada o ya cerrada.");
-        }
     }
 
     public async Task CerrarSesionAsync(string token, CancellationToken ct)
-    {
-        await _sesionRepo.CerrarSesionAsync(token, ct);
-    }
+        => await _sesionRepo.CerrarSesionAsync(token, ct);
 
     public async Task<int> LimpiarSesionesInactivasAsync(int minutosInactividad = 30, CancellationToken ct = default)
-    {
-        return await _sesionRepo.LimpiarSesionesInactivasAsync(minutosInactividad, ct);
-    }
+        => await _sesionRepo.LimpiarSesionesInactivasAsync(minutosInactividad, ct);
 
     public async Task<(bool PuedeCrear, string Mensaje, int actuales, int maximo)> ValidarCreacionEmpresaAsync(int idCliente, CancellationToken ct)
     {
@@ -70,4 +63,10 @@ public class SesionService : ISesionService
 
         return (true, "OK", empresasActivas, maxEmpresas);
     }
+
+    public async Task<bool> ExisteSesionDispositivoAsync(int idCliente, string deviceId, CancellationToken ct)
+        => await _sesionRepo.ExisteSesionDispositivoAsync(idCliente, deviceId, ct);
+
+    public async Task CerrarSesionDispositivoAsync(int idCliente, string deviceId, CancellationToken ct)
+        => await _sesionRepo.CerrarSesionDispositivoAsync(idCliente, deviceId, ct);
 }

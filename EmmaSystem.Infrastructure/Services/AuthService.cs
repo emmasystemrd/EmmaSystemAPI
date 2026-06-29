@@ -66,15 +66,20 @@ public class AuthService : IAuthService
         var (token, expira) = BuildJwtCentral(usuarioCentral);
 
         // 6.1 ✅ NUEVO: Registrar sesión activa
-        var ipAddress = "unknown"; // Se obtendrá del HttpContext en el controller
+        var ipAddress = string.IsNullOrEmpty(request.IPAddress) ? "unknown" : request.IPAddress;
         var userAgent = "EmmaSystem Desktop";
+        var deviceId = string.IsNullOrEmpty(request.DeviceId) ? "unknown" : request.DeviceId;
+        var nombreEquipo = string.IsNullOrEmpty(request.NombreEquipo) ? "unknown" : request.NombreEquipo;
+
         await _sesionService.RegistrarSesionAsync(
             usuarioCentral.IdUsuarioCentral,
             usuarioCentral.IdCliente,
-            null, // Aún no hay empresa seleccionada
+            null,
             token,
             ipAddress,
             userAgent,
+            deviceId,
+            nombreEquipo,
             ct);
 
         // 7. Generar clave secreta para validación offline

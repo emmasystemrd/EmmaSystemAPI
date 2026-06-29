@@ -13,24 +13,77 @@ public class SesionRepository
         _centralFactory = centralFactory;
     }
 
-    /// <summary>
-    /// Cuenta las sesiones activas de un cliente específico
-    /// </summary>
     public async Task<int> ContarSesionesActivasAsync(int idCliente, CancellationToken ct)
     {
         using var conn = _centralFactory.CreateConnection();
         const string sql = @"
-            SELECT COUNT(1) 
-            FROM sesiones_activas 
-            WHERE IdCliente = @IdCliente 
-              AND Estado = 1";
+        -- Limpiar sesiones sin heartbeat por más de 15 minutos
+        UPDATE sesiones_activas
+        SET Estado = 0
+        WHERE IdCliente = @IdCliente
+          AND Estado = 1
+          AND UltimoActividad < DATEADD(MINUTE, -15, GETDATE());
+
+        -- Contar sesiones activas reales
+        SELECT COUNT(1)
+        FROM sesiones_activas
+        WHERE IdCliente = @IdCliente
+          AND Estado = 1";
 
         return await conn.ExecuteScalarAsync<int>(sql, new { IdCliente = idCliente });
     }
 
-    /// <summary>
-    /// Obtiene el MaxConcurrentes del plan del cliente
-    /// </summary>
+    public async Task<bool> ExisteSesionDispositivoAsync(int idCliente, string deviceId, CancellationToken ct)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        const string sql = @"
+        SELECT COUNT(1)
+        FROM sesiones_activas
+        WHERE IdCliente = @IdCliente
+          AND DeviceId = @DeviceId
+          AND Estado = 1
+          AND UltimoActividad >= DATEADD(MINUTE, -15, GETDATE())";
+
+        return await conn.ExecuteScalarAsync<int>(sql, new { IdCliente = idCliente, DeviceId = deviceId }) > 0;
+    }
+
+    public async Task CerrarSesionDispositivoAsync(int idCliente, string deviceId, CancellationToken ct)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        const string sql = @"
+        UPDATE sesiones_activas
+        SET Estado = 0
+        WHERE IdCliente = @IdCliente
+          AND DeviceId = @DeviceId";
+
+        await conn.ExecuteAsync(sql, new { IdCliente = idCliente, DeviceId = deviceId });
+    }
+
+    public async Task RegistrarSesionAsync(int idUsuarioCentral, int idCliente, int? idEmpresa,
+        string token, string ipAddress, string userAgent, string deviceId, string nombreEquipo,
+        CancellationToken ct)
+    {
+        using var conn = _centralFactory.CreateConnection();
+        const string sql = @"
+        INSERT INTO sesiones_activas
+            (IdUsuarioCentral, IdCliente, IdEmpresa, Token, IPAddress, UserAgent, 
+             DeviceId, NombreEquipo, FechaInicio, UltimoActividad, Estado)
+        VALUES
+            (@IdUsuarioCentral, @IdCliente, @IdEmpresa, @Token, @IPAddress, @UserAgent,
+             @DeviceId, @NombreEquipo, GETDATE(), GETDATE(), 1)";
+
+        await conn.ExecuteAsync(sql, new
+        {
+            IdUsuarioCentral = idUsuarioCentral,
+            IdCliente = idCliente,
+            IdEmpresa = idEmpresa,
+            Token = token,
+            IPAddress = ipAddress,
+            UserAgent = userAgent,
+            DeviceId = deviceId,
+            NombreEquipo = nombreEquipo
+        });
+    }
     public async Task<int> GetMaxConcurrentesAsync(int idCliente, CancellationToken ct)
     {
         using var conn = _centralFactory.CreateConnection();
@@ -48,26 +101,7 @@ public class SesionRepository
     /// <summary>
     /// Registra una nueva sesión activa
     /// </summary>
-    public async Task RegistrarSesionAsync(int idUsuarioCentral, int idCliente, int? idEmpresa,
-        string token, string ipAddress, string userAgent, CancellationToken ct)
-    {
-        using var conn = _centralFactory.CreateConnection();
-        const string sql = @"
-            INSERT INTO sesiones_activas 
-                (IdUsuarioCentral, IdCliente, IdEmpresa, Token, IPAddress, UserAgent, FechaInicio, UltimoActividad, Estado)
-            VALUES 
-                (@IdUsuarioCentral, @IdCliente, @IdEmpresa, @Token, @IPAddress, @UserAgent, GETDATE(), GETDATE(), 1)";
-
-        await conn.ExecuteAsync(sql, new
-        {
-            IdUsuarioCentral = idUsuarioCentral,
-            IdCliente = idCliente,
-            IdEmpresa = idEmpresa,
-            Token = token,
-            IPAddress = ipAddress,
-            UserAgent = userAgent
-        });
-    }
+  
 
     /// <summary>
     /// Actualiza la última actividad de una sesión (heartbeat)
