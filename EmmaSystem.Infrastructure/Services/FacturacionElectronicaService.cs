@@ -629,22 +629,25 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
             encabezado.Add(comprador);
         }
 
-        // Totales - SOLO agregar ITBIS2/TotalITBIS2 si hay valor > 0
+        // Totales — orden exacto exigido por el XSD de DGII:
+        // MontoGravado* → MontoExento → ITBIS1/2/3 → TotalITBIS* → MontoTotal → ValorPagar → Retenciones
         var totales = new XElement("Totales");
+
         AddIfHasValue(totales, "MontoGravadoTotal", d.MontoGravadoTotal);
         AddIfHasValue(totales, "MontoGravadoI1", d.MontoGravadoI1);
-        AddIfNotEmpty(totales, "ITBIS1", d.ITBIS1 ?? "18");
         if (d.MontoGravadoI2.HasValue && d.MontoGravadoI2 > 0)
-        {
             AddIfHasValue(totales, "MontoGravadoI2", d.MontoGravadoI2);
-            AddIfNotEmpty(totales, "ITBIS2", d.ITBIS2 ?? "16");
-        }
         if (d.MontoGravadoI3.HasValue && d.MontoGravadoI3 > 0)
-        {
             AddIfHasValue(totales, "MontoGravadoI3", d.MontoGravadoI3);
-            AddIfNotEmpty(totales, "ITBIS3", d.ITBIS3 ?? "0");
-        }
         AddIfHasValue(totales, "MontoExento", d.MontoExento);
+
+        // ITBIS1 solo si realmente hay monto gravado al 18%
+        if (d.MontoGravadoI1.HasValue && d.MontoGravadoI1 > 0)
+            AddIfNotEmpty(totales, "ITBIS1", d.ITBIS1 ?? "18");
+        if (d.MontoGravadoI2.HasValue && d.MontoGravadoI2 > 0)
+            AddIfNotEmpty(totales, "ITBIS2", d.ITBIS2 ?? "16");
+        if (d.MontoGravadoI3.HasValue && d.MontoGravadoI3 > 0)
+            AddIfNotEmpty(totales, "ITBIS3", d.ITBIS3 ?? "0");
 
         AddIfHasValue(totales, "TotalITBIS", d.TotalITBIS);
         AddIfHasValue(totales, "TotalITBIS1", d.TotalITBIS1);
@@ -652,20 +655,47 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
             AddIfHasValue(totales, "TotalITBIS2", d.TotalITBIS2);
         if (d.TotalITBIS3.HasValue && d.TotalITBIS3 > 0)
             AddIfHasValue(totales, "TotalITBIS3", d.TotalITBIS3);
+
         totales.Add(new XElement("MontoTotal", d.MontoTotal.ToString("0.00", CultureInfo.InvariantCulture)));
         totales.Add(new XElement("ValorPagar", d.ValorPagar.ToString("0.00", CultureInfo.InvariantCulture)));
+
+        // Retenciones: van al final. Si hay CUALQUIER retención (ITBIS o ISR),
+        // el header debe traer AMBOS campos (el que no aplica en 0.00),
+        // igual que ya se hace en Item > Retencion. Solo se omiten ambos
+        // cuando no hay ninguna retención en la factura.
+        bool hayRetencion = d.TotalITBISRetenido > 0 || d.TotalISRRetencion > 0;
+        if (hayRetencion)
+        {
+            totales.Add(new XElement("TotalITBISRetenido", d.TotalITBISRetenido.ToString("0.00", CultureInfo.InvariantCulture)));
+            totales.Add(new XElement("TotalISRRetencion", d.TotalISRRetencion.ToString("0.00", CultureInfo.InvariantCulture)));
+        }
         encabezado.Add(totales);
 
         ecf.Add(encabezado);
 
-        // Items - SIN DescripcionItem
+        // Items
         var items = new XElement("DetallesItems");
         for (int i = 0; i < d.Items.Count; i++)
         {
             var item = d.Items[i];
+            // Construir Retencion ANTES del Item, porque debe ir en una posición
+            // específica de la secuencia (después de IndicadorFacturacion, antes de NombreItem)
+            XElement? retencionEl = null;
+            if (!string.IsNullOrWhiteSpace(item.IndicadorAgenteRetencionoPercepcion) ||
+                item.MontoITBISRetenido.HasValue || item.MontoISRRetenido.HasValue)
+            {
+                retencionEl = new XElement("Retencion");
+                AddIfNotEmpty(retencionEl, "IndicadorAgenteRetencionoPercepcion", item.IndicadorAgenteRetencionoPercepcion);
+                AddIfHasValue(retencionEl, "MontoITBISRetenido", item.MontoITBISRetenido);
+                AddIfHasValue(retencionEl, "MontoISRRetenido", item.MontoISRRetenido);
+            }
+
             var xmlItem = new XElement("Item",
                 new XElement("NumeroLinea", i + 1),
-                new XElement("IndicadorFacturacion", item.IndicadorFacturacion),
+                new XElement("IndicadorFacturacion", item.IndicadorFacturacion)
+            );
+            if (retencionEl != null) xmlItem.Add(retencionEl);
+            xmlItem.Add(
                 new XElement("NombreItem", item.NombreItem ?? ""),
                 new XElement("IndicadorBienoServicio", item.IndicadorBienoServicio),
                 new XElement("CantidadItem", item.CantidadItem.ToString("0.00", CultureInfo.InvariantCulture)),
@@ -673,11 +703,12 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
                 new XElement("PrecioUnitarioItem", item.PrecioUnitarioItem.ToString("0.00", CultureInfo.InvariantCulture)),
                 new XElement("MontoItem", item.MontoItem.ToString("0.00", CultureInfo.InvariantCulture))
             );
+
             items.Add(xmlItem);
         }
         ecf.Add(items);
 
-        // FechaHoraFirma - SOLO si tiene valor
+        // FechaHoraFirma
         if (!string.IsNullOrWhiteSpace(d.FechaHoraFirma))
         {
             ecf.Add(new XElement("FechaHoraFirma", d.FechaHoraFirma));
@@ -685,7 +716,6 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
 
         var doc = new XDocument(new XDeclaration("1.0", "utf-8", null), ecf);
 
-        // ✅ CRÍTICO: Formatting.None - COMPACTO SIN ESPACIOS
         using var ms = new MemoryStream();
         using var xw = new XmlTextWriter(ms, new UTF8Encoding(false)) { Formatting = Formatting.None };
         doc.Save(xw);

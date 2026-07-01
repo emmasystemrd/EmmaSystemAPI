@@ -69,4 +69,25 @@ public class SesionService : ISesionService
 
     public async Task CerrarSesionDispositivoAsync(int idCliente, string deviceId, CancellationToken ct)
         => await _sesionRepo.CerrarSesionDispositivoAsync(idCliente, deviceId, ct);
+
+    /// <summary>
+    /// NUEVA IMPLEMENTACIÓN: Conecta la llamada de control con el repositorio de aislamiento exclusivo.
+    /// </summary>
+    public async Task<(bool PuedeIniciar, string Mensaje)> ValidarYRegistrarSesionAtomicaAsync(
+        int idUsuarioCentral, int idCliente, int? idEmpresa, string token,
+        string ipAddress, string userAgent, string deviceId, string nombreEquipo,
+        int maxConcurrentes, CancellationToken ct)
+    {
+        return await _sesionRepo.ValidarYRegistrarSesionAtomicaAsync(
+            idUsuarioCentral,
+            idCliente,
+            idEmpresa,
+            token,
+            ipAddress,
+            userAgent,
+            deviceId,
+            nombreEquipo,
+            maxConcurrentes,
+            ct);
+    }
 }

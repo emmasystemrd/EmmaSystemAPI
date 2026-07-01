@@ -8,16 +8,18 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Security.Cryptography;
+
 namespace EmmaSystem.Infrastructure.Services;
 
 public class AuthService : IAuthService
 {
     private readonly AuthRepository _authRepo;
     private readonly IConfiguration _config;
-    private readonly SesionRepository _sesionRepo; // ← AGREGAR
-    private readonly ISesionService _sesionService; // ← AGREGAR
+    private readonly SesionRepository _sesionRepo;
+    private readonly ISesionService _sesionService;
+
     public AuthService(AuthRepository authRepo, IConfiguration config,
-        SesionRepository sesionRepo, ISesionService sesionService) // ← MODIFICAR
+        SesionRepository sesionRepo, ISesionService sesionService)
     {
         _authRepo = authRepo ?? throw new ArgumentNullException(nameof(authRepo));
         _config = config ?? throw new ArgumentNullException(nameof(config));
@@ -46,11 +48,11 @@ public class AuthService : IAuthService
         if (!BCrypt.Net.BCrypt.Verify(request.Password, usuarioCentral.PasswordHash))
             throw new EmmaSystemException("Credenciales inválidas.", 401, "AUTH_INVALID");
 
-        // 3. ✅ NUEVO: Validar sesiones simultáneas
-        var (puedeIniciar, mensajeSesion) = await _sesionService.ValidarSesionSimultaneaAsync(usuarioCentral.IdCliente, ct);
-        if (!puedeIniciar)
+        // 3. ✅ EXCEPCIÓN DEL MISMO DISPOSITIVO (Evita el efecto candado tras un crash o apagón)
+        var deviceId = string.IsNullOrEmpty(request.DeviceId) ? "unknown" : request.DeviceId;
+        if (deviceId != "unknown")
         {
-            throw new EmmaSystemException(mensajeSesion, 403, "AUTH_MAX_CONCURRENTES");
+            await _sesionService.CerrarSesionDispositivoAsync(usuarioCentral.IdCliente, deviceId, ct);
         }
 
         // 4. Obtener empresas disponibles del cliente
@@ -59,40 +61,48 @@ public class AuthService : IAuthService
         if (empresas.Count == 0)
             throw new EmmaSystemException("No tiene empresas activas asignadas.", 403, "AUTH_NO_EMPRESAS");
 
-        // 5. Actualizar último acceso
-        await _authRepo.UpdateUltimoAccesoCentralAsync(usuarioCentral.IdUsuarioCentral, ct);
+        // 5. Obtener el límite de concurrencia permitido por el plan de este cliente
+        var maxConcurrentes = await _sesionRepo.GetMaxConcurrentesAsync(usuarioCentral.IdCliente, ct);
 
-        // 6. Generar token central (sin contexto de empresa aún)
+        // 6. Generar token central de forma anticipada para poder insertarlo atómicamente si pasa el filtro
         var (token, expira) = BuildJwtCentral(usuarioCentral);
 
-        // 6.1 ✅ NUEVO: Registrar sesión activa
+        // 7. ✅ NUEVO FLUJO ATÓMICO: Valida sesiones simultáneas e inserta la nueva sesión bajo un único bloqueo exclusivo
         var ipAddress = string.IsNullOrEmpty(request.IPAddress) ? "unknown" : request.IPAddress;
         var userAgent = "EmmaSystem Desktop";
-        var deviceId = string.IsNullOrEmpty(request.DeviceId) ? "unknown" : request.DeviceId;
         var nombreEquipo = string.IsNullOrEmpty(request.NombreEquipo) ? "unknown" : request.NombreEquipo;
 
-        await _sesionService.RegistrarSesionAsync(
+        var (puedeIniciar, mensajeSesion) = await _sesionService.ValidarYRegistrarSesionAtomicaAsync(
             usuarioCentral.IdUsuarioCentral,
             usuarioCentral.IdCliente,
-            null,
+            null, // Aún no selecciona empresa
             token,
             ipAddress,
             userAgent,
             deviceId,
             nombreEquipo,
+            maxConcurrentes,
             ct);
 
-        // 7. Generar clave secreta para validación offline
+        if (!puedeIniciar)
+        {
+            throw new EmmaSystemException(mensajeSesion, 403, "AUTH_MAX_CONCURRENTES");
+        }
+
+        // 8. Actualizar último acceso del usuario
+        await _authRepo.UpdateUltimoAccesoCentralAsync(usuarioCentral.IdUsuarioCentral, ct);
+
+        // 9. Generar clave secreta para validación offline
         var secretKey = new byte[256];
         using (var rng = RandomNumberGenerator.Create())
         {
             rng.GetBytes(secretKey);
         }
 
-        // 8. Guardar clave secreta en la base de datos
+        // 10. Guardar clave secreta en la base de datos
         await _authRepo.UpdateSecretKeyAsync(usuarioCentral.IdCliente, secretKey, ct);
 
-        // 9. Retornar respuesta
+        // 11. Retornar respuesta
         return new LoginCentralResponseDto
         {
             Token = token,
@@ -122,7 +132,7 @@ public class AuthService : IAuthService
         if (!esValida)
             throw new EmmaSystemException("La empresa seleccionada no está disponible o no le pertenece.", 403, "AUTH_EMPRESA_INVALIDA");
 
-        // 3. ✅ CORRECCIÓN: Obtener info completa de la empresa (Nombre, RNC, Ambiente)
+        // 3. Obtener info completa de la empresa (Nombre, RNC, Ambiente)
         var infoEmpresa = await _authRepo.GetInfoEmpresaAsync(idEmpresa, ct);
 
         // 4. Generar token con contexto completo de tenant + nuevos claims
@@ -162,8 +172,8 @@ public class AuthService : IAuthService
 
         // 2. Obtener roles del usuario en la empresa
         var roles = await _authRepo.GetRolesByAccesoAsync(user.Idacceso, request.Idempresa, ct);
-        // ✅ Mover la consulta AQUÍ para usarla tanto en el token como en la respuesta
         var clienteId = await _authRepo.GetClienteIdByEmpresaAsync(request.Idempresa, ct);
+
         // 3. Generar token con contexto de tenant + datos operativos
         var (token, expira) = await BuildJwtEmpresa(user, roles, request.Idempresa, ct);
 
@@ -181,9 +191,6 @@ public class AuthService : IAuthService
     // GENERADORES DE JWT
     // ──────────────────────────────────────────────
 
-    /// <summary>
-    /// Token para login central (sin contexto de empresa)
-    /// </summary>
     private (string Token, DateTime Expira) BuildJwtCentral(UsuarioCentralRow usuario)
     {
         var jwtSection = _config.GetSection("Jwt");
@@ -215,10 +222,6 @@ public class AuthService : IAuthService
         return (new JwtSecurityTokenHandler().WriteToken(token), expira);
     }
 
-    /// <summary>
-    /// ✅ CORREGIDO: Token tras seleccionar empresa (contexto de tenant completo)
-    /// Incluye NombreEmpresa, RncCedula y Ambiente como claims
-    /// </summary>
     private (string Token, DateTime Expira) BuildJwtTenant(
         UsuarioCentralRow usuario,
         int idEmpresa,
@@ -230,7 +233,7 @@ public class AuthService : IAuthService
         var keyString = jwtSection["Key"] ?? throw new InvalidOperationException("JWT Key no configurada en appsettings.json");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expira = DateTime.UtcNow.AddMinutes(double.Parse(jwtSection["ExpireMinutes"] ?? "480")); // 8 horas para sesión de trabajo
+        var expira = DateTime.UtcNow.AddMinutes(double.Parse(jwtSection["ExpireMinutes"] ?? "480"));
 
         var claims = new List<Claim>
         {
@@ -238,10 +241,10 @@ public class AuthService : IAuthService
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("IdUsuarioCentral", usuario.IdUsuarioCentral.ToString()),
             new("ClienteId", usuario.IdCliente.ToString()),
-            new("Idempresa", idEmpresa.ToString()),       // ← Claim clave para TenantMiddleware
-            new("NombreEmpresa", nombreEmpresa),           // ← Nuevo claim
-            new("RncCedula", rncCedula ?? ""),             // ← Nuevo claim para facturación DGII
-            new("Ambiente", ambiente.ToString()),          // ← Nuevo claim (1=Prueba, 2=Cert, 3=Prod)
+            new("Idempresa", idEmpresa.ToString()),
+            new("NombreEmpresa", nombreEmpresa),
+            new("RncCedula", rncCedula ?? ""),
+            new("Ambiente", ambiente.ToString()),
             new(ClaimTypes.Name, usuario.Email),
             new(ClaimTypes.NameIdentifier, usuario.IdUsuarioCentral.ToString())
         };
@@ -259,10 +262,6 @@ public class AuthService : IAuthService
         return (new JwtSecurityTokenHandler().WriteToken(token), expira);
     }
 
-    /// <summary>
-    /// Token para login directo a empresa (usuario operativo)
-    /// Mantiene compatibilidad con claims existentes (Idusuario, Idacceso, Idrol, etc.)
-    /// </summary>
     private async Task<(string Token, DateTime Expira)> BuildJwtEmpresa(SpLoginRow user, IReadOnlyList<int> roles, int idEmpresa, CancellationToken ct)
     {
         var jwtSection = _config.GetSection("Jwt");
@@ -270,7 +269,7 @@ public class AuthService : IAuthService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var expira = DateTime.UtcNow.AddMinutes(double.Parse(jwtSection["ExpireMinutes"] ?? "480"));
-        // ✅ Agregar ESTA LÍNEA justo antes de "var claims = new List<Claim>"
+
         var clienteId = await _authRepo.GetClienteIdByEmpresaAsync(idEmpresa, ct);
         var claims = new List<Claim>
         {
@@ -278,7 +277,7 @@ public class AuthService : IAuthService
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("Idusuario", user.Idusuario.ToString()),
             new("Idempresa", idEmpresa.ToString()),
-            new("ClienteId", clienteId.ToString()),       // ← AGREGAR ESTA LÍNEA
+            new("ClienteId", clienteId.ToString()),
             new("Idacceso", user.Idacceso.ToString()),
             new("Idempleado", user.Idempleado.ToString()),
             new(ClaimTypes.Name, user.NombreUsuario),
@@ -297,22 +296,19 @@ public class AuthService : IAuthService
 
         return (new JwtSecurityTokenHandler().WriteToken(token), expira);
     }
+
     public async Task<bool> ValidarEmpresaDeClienteAsync(int idCliente, int idEmpresa, CancellationToken ct)
     {
         return await _authRepo.ValidarEmpresaDeClienteAsync(idCliente, idEmpresa, ct);
     }
-    // ──────────────────────────────────────────────
-    // RENOVACIÓN SILENCIOSA DE TOKEN
-    // ──────────────────────────────────────────────
+
     public async Task<TokenRenovadoDto?> RenovarTokenAsync(int idCliente, byte[] secretKey, CancellationToken ct)
     {
-        // 1. Verificar que el SecretKey coincide con el almacenado
         var storedKey = await _authRepo.GetSecretKeyAsync(idCliente, ct);
 
         if (storedKey == null || storedKey.Length != secretKey.Length)
             return null;
 
-        // Comparación segura (evita timing attacks)
         bool keyMatch = true;
         for (int i = 0; i < storedKey.Length; i++)
         {
@@ -326,12 +322,10 @@ public class AuthService : IAuthService
         if (!keyMatch)
             return null;
 
-        // 2. Obtener datos del usuario central para generar el nuevo token
         var usuarioCentral = await _authRepo.GetUsuarioCentralByClienteIdAsync(idCliente, ct);
         if (usuarioCentral == null || usuarioCentral.Estado != 1)
             return null;
 
-        // 3. ✅ USAR EL MÉTODO BuildJwtCentral EXISTENTE (ya genera el token correctamente)
         var (token, expira) = BuildJwtCentral(usuarioCentral);
 
         return new TokenRenovadoDto

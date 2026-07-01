@@ -377,9 +377,12 @@ public sealed class VentaController : ControllerBase
             var datosEmpresa = await _ecfRepo.ObtenerDatosEmpresaAsync(GetIdEmpresa(), ct);
             var datosCliente = await _ecfRepo.ObtenerDatosClienteAsync(venta.Idcliente, ct);
 
-            // ✅ CALCULAR TOTALES CORRECTOS
-            decimal montoGravado18 = venta.Subtotal;
-            decimal totalITBIS18 = venta.ITBIS;
+            // ✅ CONSULTAR EL COBRO PARA OBTENER RETENCIONES Y FORMAS DE PAGO
+            var pago = await _repo.GetPagoInfoAsync(GetIdEmpresa(), venta.NCF, ct);
+
+            // ✅ Variables locales para evitar warnings de null del compilador
+            decimal? retITBIS = pago?.Retencion_ITBIS;
+            decimal? retISR = pago?.Retencion_ISR;
 
             var datosEcf = new DatosFacturaElectronicaDto
             {
@@ -391,6 +394,10 @@ public sealed class VentaController : ControllerBase
                 CorreoEmisor = datosEmpresa.Email,
                 WebSite = datosEmpresa.Url,
                 FechaEmision = venta.Fecha.ToString("dd-MM-yyyy"),
+                // ✅ Comprobante Consumo (32) no lleva FechaVencimientoSecuencia; el resto sí.
+                FechaVencimientoSecuencia = venta.Tipo != "32" && venta.Vencimiento.HasValue
+                    ? venta.Vencimiento.Value.ToString("dd-MM-yyyy")
+                    : null,
                 RNCComprador = datosCliente.NumDocumento,
                 RazonSocialComprador = datosCliente.RazonSocial,
                 CorreoComprador = datosCliente.Email,
@@ -402,21 +409,67 @@ public sealed class VentaController : ControllerBase
                 IndicadorServicioTodoIncluido = "1",
                 MontoTotal = venta.Subtotal + venta.ITBIS,
                 ValorPagar = venta.Subtotal + venta.ITBIS,
-                MontoGravadoTotal = venta.Subtotal,
-                MontoGravadoI1 = venta.Monto_Servicios > 0 ? venta.Monto_Servicios : venta.Subtotal,
-                TotalITBIS = venta.ITBIS,
-                TotalITBIS1 = venta.ITBIS_Servicios > 0 ? venta.ITBIS_Servicios : venta.ITBIS,
-                Items = new List<ItemEcfDto>()
+                
+                // ✅ AGREGAR RETENCIONES TOTALES
+                // ✅ CORRECTO: usar 0m cuando no hay retención
+                TotalITBISRetenido = retITBIS > 0 ? retITBIS.Value : 0m,
+                TotalISRRetencion = retISR > 0 ? retISR.Value : 0m,
+                Items = new List<ItemEcfDto>(),
+                FormasPago = new List<FormaPagoEcfDto>()
             };
 
-            // ✅ CARGAR DETALLES (BIENES)
+            // ✅ CONSTRUIR FORMAS DE PAGO
+            if (pago != null)
+            {
+                if (pago.Efectivo > 0)
+                    datosEcf.FormasPago.Add(new FormaPagoEcfDto { FormaPago = "1", MontoPago = pago.Efectivo });
+                if (pago.Cheque > 0 || pago.Transferencia > 0)
+                    datosEcf.FormasPago.Add(new FormaPagoEcfDto { FormaPago = "2", MontoPago = pago.Cheque + pago.Transferencia });
+                if (pago.Tarjeta > 0)
+                    datosEcf.FormasPago.Add(new FormaPagoEcfDto { FormaPago = "3", MontoPago = pago.Tarjeta });
+
+                // Si no hay ningún pago real (solo retención), usar FormaPago = 4
+                // ✅ CORREGIDO: usar variables locales con ?? para convertir nullable a decimal
+                if (!datosEcf.FormasPago.Any())
+                {
+                    decimal montoCredito = datosEcf.ValorPagar - ((retITBIS ?? 0m) + (retISR ?? 0m));
+                    if (montoCredito > 0)
+                        datosEcf.FormasPago.Add(new FormaPagoEcfDto { FormaPago = "4", MontoPago = montoCredito });
+                }
+            }
+
+            // ✅ CARGAR DETALLES (BIENES) — clasificando por tasa real de ITBIS
             var detalles = await _repo.GetDetallesByVentaAsync(idVenta, ct);
+
+            decimal montoGravado18 = 0m, montoGravado16 = 0m, montoExento = 0m;
+            decimal totalItbis18 = 0m, totalItbis16 = 0m;
 
             foreach (var det in detalles)
             {
+                decimal tasa = Math.Round(det.P_Itbis, 4);
+                int indicador;
+
+                if (tasa >= 0.17m)          // 18%
+                {
+                    indicador = 1;
+                    montoGravado18 += det.Subtotal;
+                    totalItbis18 += det.ITBIS;
+                }
+                else if (tasa > 0m)         // 16%
+                {
+                    indicador = 2;
+                    montoGravado16 += det.Subtotal;
+                    totalItbis16 += det.ITBIS;
+                }
+                else                        // Exento
+                {
+                    indicador = 4;
+                    montoExento += det.Subtotal;
+                }
+
                 datosEcf.Items.Add(new ItemEcfDto
                 {
-                    IndicadorFacturacion = det.P_Itbis > 0 ? 1 : 4,
+                    IndicadorFacturacion = indicador,
                     NombreItem = det.Producto,
                     DescripcionItem = det.Producto,
                     IndicadorBienoServicio = 1, // Bien
@@ -427,17 +480,29 @@ public sealed class VentaController : ControllerBase
                 });
             }
 
-            // ✅ SI NO HAY DETALLES Y HAY SERVICIO, CREAR ITEM SINTÉTICO
-            if (!detalles.Any() && venta.Monto_Servicios > 0)
+            // ✅ SI HAY MONTO EN SERVICIOS, CREAR ITEM (sin importar si también hay bienes)
+            if (venta.Monto_Servicios > 0)
             {
+                int indicadorServicio = venta.ITBIS_Servicios > 0 ? 1 : 4;
+
+                if (indicadorServicio == 1)
+                {
+                    montoGravado18 += venta.Monto_Servicios;
+                    totalItbis18 += venta.ITBIS_Servicios;
+                }
+                else
+                {
+                    montoExento += venta.Monto_Servicios;
+                }
+
                 datosEcf.Items.Add(new ItemEcfDto
                 {
-                    IndicadorFacturacion = venta.ITBIS_Servicios > 0 ? 1 : 4,
+                    IndicadorFacturacion = indicadorServicio,
                     NombreItem = "SERVICIO",
                     DescripcionItem = venta.Descripcion ?? "Servicio profesional",
                     IndicadorBienoServicio = 2, // Servicio
                     CantidadItem = 1.00m,
-                    UnidadMedida = 43, // Unidad
+                    UnidadMedida = 43,
                     PrecioUnitarioItem = venta.Monto_Servicios,
                     MontoItem = venta.Monto_Servicios
                 });
@@ -447,6 +512,58 @@ public sealed class VentaController : ControllerBase
             if (!datosEcf.Items.Any())
             {
                 return BadRequest(new { message = "La venta no tiene detalles (productos) ni servicios. No se puede generar el XML." });
+            }
+
+            // ✅ TOTALES REALES A PARTIR DE LOS ITEMS (18% + 16% + exento)
+            datosEcf.MontoGravadoTotal = (montoGravado18 + montoGravado16) > 0 ? montoGravado18 + montoGravado16 : null;
+            datosEcf.MontoGravadoI1 = montoGravado18 > 0 ? montoGravado18 : null;
+            datosEcf.MontoGravadoI2 = montoGravado16 > 0 ? montoGravado16 : null;
+            datosEcf.MontoExento = montoExento > 0 ? montoExento : null;
+            datosEcf.TotalITBIS1 = totalItbis18 > 0 ? totalItbis18 : null;
+            datosEcf.TotalITBIS2 = totalItbis16 > 0 ? totalItbis16 : null;
+            datosEcf.TotalITBIS = (totalItbis18 + totalItbis16) > 0 ? totalItbis18 + totalItbis16 : null;
+            
+
+            // ✅ REPARTIR RETENCIONES ENTRE ÍTEMS (versión corregida)
+            if ((retITBIS ?? 0) > 0 || (retISR ?? 0) > 0)
+            {
+                decimal montoTotalVenta = datosEcf.Items.Sum(i => i.MontoItem);
+                decimal retencionITBISAcumulada = 0m;
+                decimal retencionISRAcumulada = 0m;
+                decimal totalRetITBIS = retITBIS ?? 0m;
+                decimal totalRetISR = retISR ?? 0m;
+
+                for (int i = 0; i < datosEcf.Items.Count; i++)
+                {
+                    var item = datosEcf.Items[i];
+                    bool esUltimoItem = (i == datosEcf.Items.Count - 1);
+
+                    if (esUltimoItem)
+                    {
+                        // Ajustar el último ítem para que la suma exacta dé el total
+                        item.MontoITBISRetenido = totalRetITBIS - retencionITBISAcumulada;
+                        item.MontoISRRetenido = totalRetISR - retencionISRAcumulada;
+                    }
+                    else
+                    {
+                        // Prorrateo proporcional
+                        decimal proporcion = item.MontoItem / montoTotalVenta;
+                        decimal retITBISItem = Math.Round(totalRetITBIS * proporcion, 2);
+                        decimal retISRItem = Math.Round(totalRetISR * proporcion, 2);
+
+                        item.MontoITBISRetenido = retITBISItem;
+                        item.MontoISRRetenido = retISRItem;
+
+                        retencionITBISAcumulada += retITBISItem;
+                        retencionISRAcumulada += retISRItem;
+                    }
+
+                    // Marcar indicador de agente de retención si hay retenciones
+                    if ((item.MontoITBISRetenido ?? 0m) > 0 || (item.MontoISRRetenido ?? 0m) > 0)
+                    {
+                        item.IndicadorAgenteRetencionoPercepcion = "1";
+                    }
+                }
             }
 
             string token = await _tokenService.ObtenerTokenAsync(ambiente, certBytes, claveCert!);
