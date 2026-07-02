@@ -17,7 +17,7 @@ public sealed class EmpresaController : ControllerBase
 
     public EmpresaController(IEmpresaRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")!.Value);
+    private int EmpresaIdInterna =1;
 
     /// <summary>
     /// Obtiene los datos de la empresa (sin el logo para mejor rendimiento)
@@ -26,7 +26,7 @@ public sealed class EmpresaController : ControllerBase
     [Permission(Modules.System, Operations.Ver)]
     public async Task<ActionResult<EmpresaDto>> GetById(int id, CancellationToken ct)
     {
-        var idEmpresaToken = GetIdEmpresa();
+        var idEmpresaToken = EmpresaIdInterna;
         if (idEmpresaToken != id) return Forbid();
 
         var result = await _repo.GetByIdAsync(id, ct);
@@ -42,7 +42,7 @@ public sealed class EmpresaController : ControllerBase
     [Permission(Modules.System, Operations.Ver)]
     public async Task<IActionResult> GetLogo(int id, CancellationToken ct)
     {
-        var idEmpresaToken = GetIdEmpresa();
+        var idEmpresaToken = EmpresaIdInterna;
         if (idEmpresaToken != id) return Forbid();
 
         var repo = _repo as EmpresaRepository;
@@ -58,7 +58,7 @@ public sealed class EmpresaController : ControllerBase
     [Permission(Modules.System, Operations.Editar)]
     public async Task<IActionResult> Update(int id, [FromForm] EmpresaUpdateRequest request, CancellationToken ct)
     {
-        var idEmpresaToken = GetIdEmpresa();
+        var idEmpresaToken = EmpresaIdInterna;
         if (idEmpresaToken != id) return Forbid();
 
         try

@@ -442,7 +442,7 @@ public sealed class VentaRepository : IVentaRepository
         var result = await conn.QueryAsync<VentaReporteDto>(
             new CommandDefinition(sql, new
             {
-                IdEmpresa = idEmpresa,
+                IdEmpresa = EmpresaIdInterna,
                 Fecha1 = fecha1,
                 Fecha2 = fecha2,
                 Comprobante = comprobante ?? ""
@@ -463,7 +463,7 @@ public sealed class VentaRepository : IVentaRepository
         var result = await conn.QueryAsync<ArticuloVendidoReporteDto>(
             new CommandDefinition(sql, new
             {
-                IdEmpresa = idEmpresa,
+                IdEmpresa = EmpresaIdInterna,
                 Fecha1 = fecha1,
                 Fecha2 = fecha2
             }, cancellationToken: ct));
@@ -476,7 +476,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_ventas_detalle @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Iddepartamento=@IdDepartamento";
-        var result = await conn.QueryAsync<VentaDepartamentoReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdDepartamento = idDepartamento }, cancellationToken: ct));
+        var result = await conn.QueryAsync<VentaDepartamentoReporteDto>(new CommandDefinition(sql, new { IdEmpresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2, IdDepartamento = idDepartamento }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -484,7 +484,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_articulos_utilidad @Idempresa=@IdEmpresa, @fecha1=@Fecha1, @fecha2=@Fecha2";
-        var result = await conn.QueryAsync<UtilidadProductoReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2 }, cancellationToken: ct));
+        var result = await conn.QueryAsync<UtilidadProductoReporteDto>(new CommandDefinition(sql, new { IdEmpresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2 }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -492,7 +492,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_comision_venta @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idempresa=@IdEmpresa";
-        var result = await conn.QueryAsync<ComisionVentaReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, IdEmpresa = idEmpresa }, cancellationToken: ct));
+        var result = await conn.QueryAsync<ComisionVentaReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, IdEmpresa = EmpresaIdInterna }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -500,7 +500,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_comision_producto @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idempleado=@IdEmpleado, @Idempresa=@IdEmpresa";
-        var result = await conn.QueryAsync<ComisionProductoReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, IdEmpleado = idEmpleado, IdEmpresa = idEmpresa }, cancellationToken: ct));
+        var result = await conn.QueryAsync<ComisionProductoReporteDto>(new CommandDefinition(sql, new { Fecha1 = fecha1, Fecha2 = fecha2, IdEmpleado = idEmpleado, IdEmpresa = EmpresaIdInterna }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -533,7 +533,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_clientes_resumen @Idempresa=@IdEmpresa, @Fecha=@Fecha";
-        var result = await conn.QueryAsync<SaldosAntiguedadReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha = fecha }, cancellationToken: ct));
+        var result = await conn.QueryAsync<SaldosAntiguedadReporteDto>(new CommandDefinition(sql, new { IdEmpresa = EmpresaIdInterna, Fecha = fecha }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -541,7 +541,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_movimiento_clientes @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idcliente=@IdCliente";
-        var result = await conn.QueryAsync<MovimientoClienteReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdCliente = idCliente }, cancellationToken: ct));
+        var result = await conn.QueryAsync<MovimientoClienteReporteDto>(new CommandDefinition(sql, new { IdEmpresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2, IdCliente = idCliente }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -549,7 +549,7 @@ public sealed class VentaRepository : IVentaRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         const string sql = "EXEC r_cobro1 @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idusuario=@IdUsuario";
-        var result = await conn.QueryAsync<ReciboCobroReporteDto>(new CommandDefinition(sql, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdUsuario = idUsuario ?? 0 }, cancellationToken: ct));
+        var result = await conn.QueryAsync<ReciboCobroReporteDto>(new CommandDefinition(sql, new { IdEmpresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2, IdUsuario = idUsuario ?? 0 }, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -559,7 +559,7 @@ public sealed class VentaRepository : IVentaRepository
 
         // Obtener datos del cliente
         const string sqlCliente = "EXEC r_datos_cliente @TextoBuscar=@IdCliente, @Idempresa=@IdEmpresa";
-        var cliente = await conn.QueryFirstOrDefaultAsync<EstadoCuentaReporteDto>(new CommandDefinition(sqlCliente, new { IdCliente = idCliente, IdEmpresa = idEmpresa }, cancellationToken: ct));
+        var cliente = await conn.QueryFirstOrDefaultAsync<EstadoCuentaReporteDto>(new CommandDefinition(sqlCliente, new { IdCliente = idCliente, IdEmpresa = EmpresaIdInterna }, cancellationToken: ct));
 
         if (cliente == null) return null;
 
@@ -579,7 +579,7 @@ public sealed class VentaRepository : IVentaRepository
 
         // Obtener movimientos
         const string sqlMovimientos = "EXEC r_movimiento_clientes @Idempresa=@IdEmpresa, @Fecha1=@Fecha1, @Fecha2=@Fecha2, @Idcliente=@IdCliente";
-        var movimientos = await conn.QueryAsync<MovimientoClienteReporteDto>(new CommandDefinition(sqlMovimientos, new { IdEmpresa = idEmpresa, Fecha1 = fecha1, Fecha2 = fecha2, IdCliente = idCliente }, cancellationToken: ct));
+        var movimientos = await conn.QueryAsync<MovimientoClienteReporteDto>(new CommandDefinition(sqlMovimientos, new { IdEmpresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2, IdCliente = idCliente }, cancellationToken: ct));
         cliente.Movimientos = movimientos.ToList();
 
         return cliente;

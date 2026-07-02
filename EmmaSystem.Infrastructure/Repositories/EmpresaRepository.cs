@@ -36,7 +36,7 @@ public sealed class EmpresaRepository : IEmpresaRepository
 
         return new EmpresaDto
         {
-            Idempresa = row.Idempresa,
+            Idempresa = EmpresaIdInterna,
             Nombre = row.Nombre ?? "",
             Tipo = row.Tipo ?? "",
             RNC = row.RNC ?? "",
@@ -69,7 +69,7 @@ public sealed class EmpresaRepository : IEmpresaRepository
 
         var actuales = await conn.QueryFirstOrDefaultAsync(
             "SELECT Logo, Fecha_Cierre FROM Empresa WHERE Idempresa = @Id",
-            new { Id = dto.Idempresa },
+            new { Id = EmpresaIdInterna },
             commandType: CommandType.Text);
 
         byte[]? logoFinal = logoBytes;
@@ -81,7 +81,7 @@ public sealed class EmpresaRepository : IEmpresaRepository
             fechaFinal = (DateTime?)actuales.Fecha_Cierre;
 
         var p = new DynamicParameters();
-        p.Add("@Idempresa", dto.Idempresa);
+        p.Add("@Idempresa", EmpresaIdInterna);
         p.Add("@Nombre", dto.Nombre);
         p.Add("@Tipo", dto.Tipo);
         p.Add("@RNC", dto.RNC);
