@@ -1,12 +1,13 @@
-﻿using EmmaSystem.Application.DTOs.Auth;
+﻿using Dapper;
+using EmmaSystem.Application.DTOs.Auth;
 using EmmaSystem.Application.Interfaces;
+using EmmaSystem.Infrastructure.Data;
 using EmmaSystem.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
-using Dapper;
-using EmmaSystem.Infrastructure.Data;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace EmmaSystem.API.Controllers;
 
@@ -559,39 +560,39 @@ public class AuthController : ControllerBase
             if (request.IdCliente <= 0 || request.SecretKey == null || request.SecretKey.Length == 0)
                 return BadRequest(new { message = "Datos de renovación inválidos." });
 
-            // CORREGIDO: Validación del identificador de hardware
             if (string.IsNullOrEmpty(request.DeviceId))
                 return BadRequest(new { message = "El identificador del dispositivo es requerido." });
 
-            bool dispositivoValido = await _sesionService.ExisteSesionDispositivoAsync(request.IdCliente, request.DeviceId, ct);
-            if (!dispositivoValido)
-            {
-                return StatusCode(403, new { message = "Acceso denegado. El dispositivo no coincide o la sesión expiró." });
-            }
-
-            var resultado = await _authService.RenovarTokenAsync(request.IdCliente, request.SecretKey, ct);
+            // ✅ DESPUÉS
+            var resultado = await _authService.RenovarTokenConSesionAsync(
+                request.IdCliente, request.SecretKeyBytes, request.DeviceId,
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown", ct);
 
             if (resultado == null)
                 return Unauthorized(new { message = "No se pudo renovar el token. Credenciales inválidas." });
 
-            return Ok(new
-            {
-                token = resultado.Token,
-                expiresAt = resultado.ExpiresAt,
-                message = "Token renovado exitosamente."
-            });
+            if (!resultado.PuedeIniciar)
+                return StatusCode(403, new { message = resultado.Mensaje });
+
+            return Ok(new { token = resultado.Token, expiresAt = resultado.ExpiresAt, message = "Token renovado exitosamente." });
         }
         catch (Exception ex)
         {
             return StatusCode(500, new { message = $"Error al renovar token: {ex.Message}" });
         }
     }
-
+    // ✅ DESPUÉS
     public class RenovarTokenRequest
     {
         public int IdCliente { get; set; }
-        public byte[] SecretKey { get; set; } = Array.Empty<byte>();
-        public string DeviceId { get; set; } = string.Empty; // ← CORREGIDO: Se añade esta propiedad
+        public string SecretKey { get; set; } = string.Empty; // ← Cambiar de byte[] a string
+        public string DeviceId { get; set; } = string.Empty;
+
+        // Propiedad calculada para convertir Base64 a byte[]
+        [JsonIgnore]
+        public byte[] SecretKeyBytes => string.IsNullOrEmpty(SecretKey)
+            ? Array.Empty<byte>()
+            : Convert.FromBase64String(SecretKey);
     }
 
     public class EmpresaDisponibleDto

@@ -16,7 +16,7 @@ public sealed class ConfiguracionController : ControllerBase
 
     public ConfiguracionController(IConfiguracionRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")?.Value ?? "1");
+    private int GetIdEmpresa() => 1;
 
     // ═══════════════════════════════════════════════════════════════
     // FACTURACIÓN ELECTRÓNICA

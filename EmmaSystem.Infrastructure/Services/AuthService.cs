@@ -92,17 +92,21 @@ public class AuthService : IAuthService
         // 8. Actualizar último acceso del usuario
         await _authRepo.UpdateUltimoAccesoCentralAsync(usuarioCentral.IdUsuarioCentral, ct);
 
-        // 9. Generar clave secreta para validación offline
-        var secretKey = new byte[256];
-        using (var rng = RandomNumberGenerator.Create())
+        // 9. Obtener o generar clave secreta para validación offline
+        var secretKey = await _authRepo.GetSecretKeyAsync(usuarioCentral.IdCliente, ct);
+
+        if (secretKey == null || secretKey.Length == 0)
         {
-            rng.GetBytes(secretKey);
+            // Primera vez: generar nuevo SecretKey
+            secretKey = new byte[256];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(secretKey);
+            }
+            await _authRepo.UpdateSecretKeyAsync(usuarioCentral.IdCliente, secretKey, ct);
         }
 
-        // 10. Guardar clave secreta en la base de datos
-        await _authRepo.UpdateSecretKeyAsync(usuarioCentral.IdCliente, secretKey, ct);
-
-        // 11. Retornar respuesta
+        // 10. Retornar respuesta (NO actualizar si ya existe)
         return new LoginCentralResponseDto
         {
             Token = token,
@@ -302,7 +306,7 @@ public class AuthService : IAuthService
         return await _authRepo.ValidarEmpresaDeClienteAsync(idCliente, idEmpresa, ct);
     }
 
-    public async Task<TokenRenovadoDto?> RenovarTokenAsync(int idCliente, byte[] secretKey, CancellationToken ct)
+    public async Task<TokenRenovadoConSesionDto?> RenovarTokenAsync(int idCliente, byte[] secretKey, CancellationToken ct)
     {
         var storedKey = await _authRepo.GetSecretKeyAsync(idCliente, ct);
 
@@ -328,8 +332,59 @@ public class AuthService : IAuthService
 
         var (token, expira) = BuildJwtCentral(usuarioCentral);
 
-        return new TokenRenovadoDto
+        return new TokenRenovadoConSesionDto
         {
+            Token = token,
+            ExpiresAt = expira
+        };
+    }
+    public async Task<TokenRenovadoConSesionDto?> RenovarTokenConSesionAsync(
+    int idCliente, byte[] secretKey, string deviceId, string ipAddress, CancellationToken ct)
+    {
+        // 1. Validar SecretKey (misma lógica de comparación constante que ya existía)
+        var storedKey = await _authRepo.GetSecretKeyAsync(idCliente, ct);
+        if (storedKey == null || storedKey.Length != secretKey.Length)
+            return null;
+
+        bool keyMatch = true;
+        for (int i = 0; i < storedKey.Length; i++)
+        {
+            if (storedKey[i] != secretKey[i]) { keyMatch = false; break; }
+        }
+        if (!keyMatch) return null;
+
+        var usuarioCentral = await _authRepo.GetUsuarioCentralByClienteIdAsync(idCliente, ct);
+        if (usuarioCentral == null || usuarioCentral.Estado != 1)
+            return null;
+
+        // 2. Generar el nuevo token
+        var (token, expira) = BuildJwtCentral(usuarioCentral);
+
+        // 3. ✅ Tratar la renovación como re-login silencioso:
+        //    liberar cualquier sesión vieja de ESTE MISMO dispositivo (igual que hace
+        //    el login normal), y registrar una sesión fresca bajo el candado de
+        //    concurrencia atómico. Esto NO depende de que la sesión anterior tuviera
+        //    heartbeat reciente — solo de que el SecretKey sea válido.
+        await _sesionService.CerrarSesionDispositivoAsync(idCliente, deviceId, ct);
+
+        var maxConcurrentes = await _sesionRepo.GetMaxConcurrentesAsync(idCliente, ct);
+
+        var (puedeIniciar, mensaje) = await _sesionService.ValidarYRegistrarSesionAtomicaAsync(
+            usuarioCentral.IdUsuarioCentral,
+            idCliente,
+            null,
+            token,
+            ipAddress,
+            "EmmaSystem Desktop (renovación)",
+            deviceId,
+            "unknown",
+            maxConcurrentes,
+            ct);
+
+        return new TokenRenovadoConSesionDto
+        {
+            PuedeIniciar = puedeIniciar,
+            Mensaje = mensaje,
             Token = token,
             ExpiresAt = expira
         };

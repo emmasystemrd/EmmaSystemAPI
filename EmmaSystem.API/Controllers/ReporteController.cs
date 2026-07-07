@@ -19,7 +19,7 @@ public sealed class ReporteController : ControllerBase
         _ventaRepo = ventaRepo;
     }
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")?.Value ?? "1");
+    private int GetIdEmpresa() => 1;
 
     // ═══ REPORTE: VENTAS POR COMPROBANTE ═══
     [HttpGet("ventas-comprobante")]

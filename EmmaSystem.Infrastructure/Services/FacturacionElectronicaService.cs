@@ -366,7 +366,36 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
                 else
                 {
                     estado = "RECHAZADO";
-                    mensajeError = $"HTTP {(int)response.StatusCode}: {responseData}";
+
+                    // Capturar headers de la respuesta que puedan dar contexto
+                    // (DGII a veces no manda body en 401/403, pero sí headers relevantes)
+                    var headersInfo = string.Join(" | ",
+                        response.Headers
+                            .Concat(response.Content.Headers)
+                            .Select(h => $"{h.Key}={string.Join(",", h.Value)}"));
+
+                    string detalle = string.IsNullOrWhiteSpace(responseData)
+                        ? "(sin cuerpo en la respuesta de DGII)"
+                        : responseData;
+
+                    if ((int)response.StatusCode == 401)
+                    {
+                        mensajeError =
+                            $"HTTP 401 No Autorizado: el token Bearer fue rechazado por DGII. " +
+                            $"Posibles causas: token expirado, token generado con RNC/certificado distinto al del XML enviado ({datos.RNCEmisor}), " +
+                            $"o ambiente incorrecto ({ambienteNombre}). Detalle: {detalle}. Headers: {headersInfo}";
+                    }
+                    else if ((int)response.StatusCode == 403)
+                    {
+                        mensajeError =
+                            $"HTTP 403 Prohibido: el RNC emisor ({datos.RNCEmisor}) probablemente no está autorizado " +
+                            $"para el tipo de comprobante {datos.TipoComprobante} o el ambiente {ambienteNombre}. Detalle: {detalle}. Headers: {headersInfo}";
+                    }
+                    else
+                    {
+                        mensajeError = $"HTTP {(int)response.StatusCode}: {detalle}";
+                    }
+
                     Console.WriteLine($"[ECF] ❌ RECHAZADO: {mensajeError}");
                 }
             }

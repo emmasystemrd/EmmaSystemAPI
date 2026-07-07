@@ -18,5 +18,6 @@ public interface IAuthService
     /// </summary>
     Task<SeleccionEmpresaResponseDto> LoginEmpresaAsync(LoginEmpresaRequestDto request, CancellationToken ct = default);
     Task<bool> ValidarEmpresaDeClienteAsync(int idCliente, int idEmpresa, CancellationToken ct);
-    Task<TokenRenovadoDto?> RenovarTokenAsync(int idCliente, byte[] secretKey, CancellationToken ct = default);
+    Task<TokenRenovadoConSesionDto?> RenovarTokenConSesionAsync(
+    int idCliente, byte[] secretKey, string deviceId, string ipAddress, CancellationToken ct = default);
 }

@@ -42,10 +42,12 @@ public class TokenDgiiService : ITokenDgiiService
 
         Console.WriteLine($"[TOKEN] 🔄 Obteniendo nuevo token para ambiente: {ambienteNombre}");
 
-        // ✅ SIEMPRE USAR "CerteCF" PARA AUTENTICACIÓN (igual que el desktop)
-        // El desktop usa: https://eCF.dgii.gov.do/CerteCF/Autenticacion/api/Autenticacion/Semilla
-        string urlSemilla = $"https://ecf.dgii.gov.do/CerteCF/Autenticacion/api/Autenticacion/Semilla";
-        string urlValidar = $"https://ecf.dgii.gov.do/CerteCF/Autenticacion/api/Autenticacion/ValidarSemilla";
+        // ✅ FIX: la autenticación debe pedirse contra el MISMO ambiente donde
+        // se va a usar el token (testecf/certecf/ecf), igual que el envío del
+        // XML. Usar siempre CerteCF causaba 401 al enviar documentos reales
+        // a producción (ecf) con un token emitido por el ambiente de certificación.
+        string urlSemilla = $"https://ecf.dgii.gov.do/{ambienteNombre}/Autenticacion/api/Autenticacion/Semilla";
+        string urlValidar = $"https://ecf.dgii.gov.do/{ambienteNombre}/Autenticacion/api/Autenticacion/ValidarSemilla";
 
         Console.WriteLine($"[TOKEN] URL Semilla: {urlSemilla}");
 

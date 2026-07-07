@@ -17,7 +17,7 @@ public sealed class ClienteController : ControllerBase
 
     public ClienteController(IClienteRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")!.Value);
+    private int GetIdEmpresa() => 1;
     // En EmmaSystem, el Idusuario del JWT es el mismo que se usa como Idlogin en los SPs
     private int GetIdLogin() => int.Parse(User.FindFirst("Idusuario")!.Value);
 

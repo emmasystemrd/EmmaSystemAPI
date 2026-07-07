@@ -22,7 +22,7 @@ public class LicenciaController : ControllerBase
         [FromBody] ValidarLicenciaRequestDto request,
         CancellationToken ct)
     {
-        var result = await _licenciaService.ValidarAsync(request.IdCliente, request.SecretKey, ct);
+        var result = await _licenciaService.ValidarAsync(request.IdCliente, request.SecretKeyBytes, ct);
         return Ok(result);
     }
 }

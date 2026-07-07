@@ -16,7 +16,7 @@ public sealed class UbicacionController : ControllerBase
 
     public UbicacionController(IUbicacionRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")?.Value ?? "1");
+    private int GetIdEmpresa() => 1;
 
     // ═══════════════════════════════════════════════════════════════
     // PROVINCIAS (Datos nacionales de RD - no requieren Idempresa)

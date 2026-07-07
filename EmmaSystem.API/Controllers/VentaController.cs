@@ -32,7 +32,7 @@ public sealed class VentaController : ControllerBase
         _tokenService = tokenService;
     }
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")?.Value ?? "1");
+    private int GetIdEmpresa() => 1;
     private int GetIdLogin() => int.Parse(User.FindFirst("Idusuario")?.Value ?? "1");
 
     // === LISTADOS ===

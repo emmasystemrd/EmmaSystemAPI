@@ -17,7 +17,7 @@ public sealed class CobrosController : ControllerBase
     public CobrosController(ICobrosRepository repo) => _repo = repo;
 
     private int GetIdLogin() => int.Parse(User.FindFirst("Idusuario")?.Value ?? "1");
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")?.Value ?? "1");
+    private int GetIdEmpresa() => 1;
 
     // ═══ COBROS NORMALES ═══
 

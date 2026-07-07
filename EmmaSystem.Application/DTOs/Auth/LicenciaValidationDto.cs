@@ -1,9 +1,17 @@
-﻿namespace EmmaSystem.Application.DTOs.Auth;
+﻿using System.Text.Json.Serialization;
 
+namespace EmmaSystem.Application.DTOs.Auth;
+
+// ✅ DESPUÉS
 public class ValidarLicenciaRequestDto
 {
     public int IdCliente { get; set; }
-    public byte[] SecretKey { get; set; } = Array.Empty<byte>();
+    public string SecretKey { get; set; } = string.Empty;
+
+    [JsonIgnore]
+    public byte[] SecretKeyBytes => string.IsNullOrEmpty(SecretKey)
+        ? Array.Empty<byte>()
+        : Convert.FromBase64String(SecretKey);
 }
 
 public class LicenciaValidationResultDto

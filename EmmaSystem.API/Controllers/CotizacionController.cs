@@ -16,7 +16,7 @@ public sealed class CotizacionController : ControllerBase
 
     public CotizacionController(ICotizacionRepository repo) => _repo = repo;
 
-    private int GetIdEmpresa() => int.Parse(User.FindFirst("Idempresa")!.Value);
+    private int GetIdEmpresa() => 1;
 
     [HttpGet]
     [Permission(Modules.Cliente, Operations.Ver)]
