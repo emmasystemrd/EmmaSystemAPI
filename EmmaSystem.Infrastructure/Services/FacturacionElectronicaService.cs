@@ -76,7 +76,13 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
         if (string.IsNullOrWhiteSpace(d.ENCF)) throw new ArgumentException("El eNCF es obligatorio.");
         if (string.IsNullOrWhiteSpace(d.RNCEmisor)) throw new ArgumentException("El RNC del emisor es obligatorio.");
         if (d.Items == null || !d.Items.Any()) throw new ArgumentException("Debe proporcionar al menos un ítem.");
-
+        if (d.TipoComprobante == "44")
+        {
+            d.IndicadorMontoGravado = null;
+            d.IndicadorServicioTodoIncluido = null;
+            d.IndicadorEnvioDiferido = null;
+            
+        }
         return ConstruirXml(d);
     }
 
@@ -686,6 +692,8 @@ public class FacturacionElectronicaService : IFacturacionElectronicaService
             AddIfHasValue(totales, "TotalITBIS3", d.TotalITBIS3);
 
         totales.Add(new XElement("MontoTotal", d.MontoTotal.ToString("0.00", CultureInfo.InvariantCulture)));
+        if(d.TipoComprobante=="44")
+            totales.Add(new XElement("MontoPeriodo", d.MontoTotal.ToString("0.00", CultureInfo.InvariantCulture)));
         totales.Add(new XElement("ValorPagar", d.ValorPagar.ToString("0.00", CultureInfo.InvariantCulture)));
 
         // Retenciones: van al final. Si hay CUALQUIER retención (ITBIS o ISR),

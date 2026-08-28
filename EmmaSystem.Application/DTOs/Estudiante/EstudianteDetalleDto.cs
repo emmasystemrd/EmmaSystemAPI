@@ -13,7 +13,7 @@ public class EstudianteDetalleDto
     public bool TieneFoto { get; set; }
     public int Tipo_Doc { get; set; }
     public string Num_Documento { get; set; } = string.Empty;
-    public string Lugar_Nacimiento { get; set; } = string.Empty;
+    public int? Lugar_Nacimiento { get; set; } // ✅ CAMBIADO de string a int?
     public string Telefono { get; set; } = string.Empty;
     public string Celular { get; set; } = string.Empty;
     public int? Nacionalidad { get; set; }

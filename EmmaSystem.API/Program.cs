@@ -75,19 +75,45 @@
             builder.Services.AddScoped<ITerminoRepository, TerminoRepository>();
             builder.Services.AddScoped<ICotizacionRepository, CotizacionRepository>();
             builder.Services.AddScoped<IVentaRepository, VentaRepository>();
+            builder.Services.AddScoped<ICobrosRepository, CobrosRepository>();
             builder.Services.AddScoped<IUbicacionRepository, UbicacionRepository>();
             builder.Services.AddScoped<IEnCFRepository, EnCFRepository>();
             builder.Services.AddScoped<IConfiguracionRepository, ConfiguracionRepository>();
+
+            // ═══════════════════════════════════════════════════════════════
+            // MÓDULO DE EDUCACIÓN
+            // ═══════════════════════════════════════════════════════════════
             builder.Services.AddScoped<ICursosRepository, CursosRepository>();
             builder.Services.AddScoped<IEstudiantesRepository, EstudiantesRepository>();
             builder.Services.AddScoped<IInscripcionesRepository, InscripcionesRepository>();
             builder.Services.AddScoped<IAsistenciasRepository, AsistenciasRepository>();
-            builder.Services.AddScoped<ICobrosRepository, CobrosRepository>();
+
+            // ✅ AGREGADO PARA MÓDULO CURSOS (Selector de Instructores)
+            builder.Services.AddScoped<IEmpleadosRepository, EmpleadosRepository>();
+
+            // ✅ AGREGADO PARA MÓDULO REPORTE ESTUDIANTES
+            builder.Services.AddScoped<IReportesEstudiantesRepository, ReportesEstudiantesRepository>();
+
+            // ✅ AGREGADO PARA MÓDULO CALIFICAR CURSO
+            builder.Services.AddScoped<ICalificacionesRepository, CalificacionesRepository>();
+
             // Registrar servicios de facturación electrónica
             builder.Services.AddScoped<IFacturacionElectronicaService, FacturacionElectronicaService>();
             builder.Services.AddScoped<IEcfXmlRepository, EcfXmlRepository>();
             builder.Services.AddScoped<ITokenDgiiService, TokenDgiiService>();
-            builder.Services.AddScoped<ILicenciaService, LicenciaService>(); // ← AGREGADO
+            builder.Services.AddScoped<ILicenciaService, LicenciaService>();
+
+            // Registrar repositorio de ECF Recibidos con conexión a DGII_Recepcion
+            builder.Services.AddScoped<IEcfRecibidoRepository>(sp =>
+            {
+                var config = sp.GetRequiredService<IConfiguration>();
+
+                var connectionString = config.GetConnectionString("DGII_Recepcion")
+                    ?? throw new InvalidOperationException(
+                        "No se encontró la cadena de conexión 'DGII_Recepcion'.");
+
+                return new EcfRecibidoRepository(connectionString);
+            });
 
             // ──────────────────────────────────────────────
             // 6) Servicios de Aplicación
@@ -177,7 +203,7 @@
                     p.WithOrigins(
                             "http://localhost:5173",
                             "http://localhost:3000",
-                            "https://emmasystem.net")
+                            "https://app.emmasystem.net")
                      .AllowAnyHeader()
                      .AllowAnyMethod()));
 

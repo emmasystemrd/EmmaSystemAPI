@@ -132,4 +132,34 @@ public sealed class CursosController : ControllerBase
         await _repo.DeleteAsync(id, ct);
         return Ok(new { message = "Curso eliminado correctamente." });
     }
+    /// <summary>
+    /// Obtiene los cursos activos asignados a un instructor específico.
+    /// </summary>
+    [HttpGet("instructor/{idInstructor:int}")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<IReadOnlyList<CursoListadoDto>>> GetByInstructor(int idInstructor, CancellationToken ct)
+    {
+        if (idInstructor <= 0)
+            return BadRequest(new { message = "El ID del instructor debe ser mayor a 0." });
+
+        var result = await _repo.GetByInstructorAsync(idInstructor, ct);
+        return Ok(result);
+    }
+    // ═══════════════════════════════════════════════════════════════
+    // CURSOS DEL INSTRUCTOR AUTENTICADO (para Asistencia)
+    // ═══════════════════════════════════════════════════════════════
+    /// <summary>
+    /// Obtiene los cursos activos del instructor autenticado (según claim Idempleado del JWT).
+    /// </summary>
+    [HttpGet("mis-cursos")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<IReadOnlyList<CursoListadoDto>>> GetMisCursos(CancellationToken ct)
+    {
+        var idEmpleado = int.Parse(User.FindFirst("Idempleado")?.Value ?? "0");
+        if (idEmpleado <= 0)
+            return Unauthorized(new { message = "El usuario autenticado no tiene un empleado asociado." });
+
+        var result = await _repo.GetByInstructorAsync(idEmpleado, ct);
+        return Ok(result);
+    }
 }

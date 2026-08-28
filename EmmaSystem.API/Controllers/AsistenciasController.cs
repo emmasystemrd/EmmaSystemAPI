@@ -1,7 +1,7 @@
 ﻿using EmmaSystem.API.Filters;
 using EmmaSystem.Application.Constants;
 using EmmaSystem.Application.DTOs.Asistencia;
-using EmmaSystem.Application.Interfaces; // ✅ Solo importamos la interfaz
+using EmmaSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +12,6 @@ namespace EmmaSystem.API.Controllers;
 [Authorize]
 public sealed class AsistenciasController : ControllerBase
 {
-    // ✅ Solo declaramos la interfaz, NO la clase concreta
     private readonly IAsistenciasRepository _repo;
 
     public AsistenciasController(IAsistenciasRepository repo)
@@ -21,6 +20,7 @@ public sealed class AsistenciasController : ControllerBase
     }
 
     private int GetIdLogin() => int.Parse(User.FindFirst("Idusuario")?.Value ?? "1");
+    private int GetIdEmpleado() => int.Parse(User.FindFirst("Idempleado")?.Value ?? "0");
 
     /// <summary>
     /// Obtiene la lista de estudiantes para tomar asistencia (o los ya registrados)
@@ -47,9 +47,7 @@ public sealed class AsistenciasController : ControllerBase
     public async Task<ActionResult> SaveAsistencia([FromBody] AsistenciaSaveDto dto, CancellationToken ct)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
-
         dto.Idlogin = GetIdLogin();
-
         var idAsistencia = await _repo.SaveAsistenciaAsync(dto, ct);
         return Ok(new { idAsistencia, message = "Asistencia guardada correctamente." });
     }
@@ -70,6 +68,7 @@ public sealed class AsistenciasController : ControllerBase
         var result = await _repo.GetMatrixAsistenciaAsync(fecha1, fecha2, idCurso, idDetalleCurso, idInstructor, ct);
         return Ok(result);
     }
+
     /// <summary>
     /// Busca si ya existe una asistencia registrada para la combinación fecha+curso+instructor
     /// </summary>
@@ -85,17 +84,38 @@ public sealed class AsistenciasController : ControllerBase
         var id = await _repo.GetExistingAsistenciaIdAsync(fecha, idCurso, idDetalleCurso, idInstructor, ct);
         return Ok(id);
     }
+
     [HttpGet("semanal")]
     [Permission(Modules.Educacion, Operations.Ver)]
     public async Task<ActionResult<AsistenciaFormularioDto>> GetAsistenciaSemanal(
-    [FromQuery] DateTime fecha1,
-    [FromQuery] DateTime fecha2,
-    [FromQuery] int idCurso,
-    [FromQuery] int? idDetalleCurso,
-    [FromQuery] int idInstructor,
-    CancellationToken ct)
+        [FromQuery] DateTime fecha1,
+        [FromQuery] DateTime fecha2,
+        [FromQuery] int idCurso,
+        [FromQuery] int? idDetalleCurso,
+        [FromQuery] int idInstructor,
+        CancellationToken ct)
     {
         var result = await _repo.GetAsistenciaSemanalAsync(fecha1, fecha2, idCurso, idDetalleCurso, idInstructor, ct);
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ✅ NUEVO: REPORTE FILTRADO DE ASISTENCIA
+    // ═══════════════════════════════════════════════════════════════
+    /// <summary>
+    /// Reporte de asistencia con filtros por Curso, Instructor, Fecha y Estudiante.
+    /// </summary>
+    [HttpGet("reporte")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<List<AsistenciaReporteFiltradoDto>>> GetReporteFiltrado(
+        [FromQuery] DateTime fecha1,
+        [FromQuery] DateTime fecha2,
+        [FromQuery] int? idCurso = null,
+        [FromQuery] int? idInstructor = null,
+        [FromQuery] int? idEstudiante = null,
+        CancellationToken ct = default)
+    {
+        var result = await _repo.GetReporteFiltradoAsync(fecha1, fecha2, idCurso, idInstructor, idEstudiante, ct);
         return Ok(result);
     }
 }

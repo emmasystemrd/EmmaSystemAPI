@@ -35,7 +35,6 @@ public sealed class InscripcionesRepository : IInscripcionesRepository
         DateTime? fecha1, DateTime? fecha2, bool isFecha, string texto, string columna, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var columnasValidas = new[] { "e.Nombres", "e.Apellido1", "e.Apellido2", "e.Num_Documento", "u.Curso", "i.Codigo" };
         if (!string.IsNullOrEmpty(columna) && !columnasValidas.Contains(columna))
             columna = "e.Nombres";
@@ -43,16 +42,18 @@ public sealed class InscripcionesRepository : IInscripcionesRepository
             columna = "e.Nombres";
 
         var p = new DynamicParameters();
-        p.Add("@Fecha1", fecha1 ?? DateTime.MinValue);
-        p.Add("@Fecha2", fecha2 ?? DateTime.MaxValue);
+
+        // ✅ CORREGIDO: SQL Server DATETIME mínimo es 1753-01-01. DateTime.MinValue causa SqlDateTime overflow.
+        p.Add("@Fecha1", fecha1 ?? new DateTime(1900, 1, 1));
+        p.Add("@Fecha2", fecha2 ?? new DateTime(9999, 12, 31));
+
         p.Add("@IsFecha", isFecha ? 1 : 0);
         p.Add("@TextoBuscar", string.IsNullOrEmpty(texto) ? "" : texto);
         p.Add("@Columna", columna);
 
         var result = await conn.QueryAsync<InscripcionListadoDto>(
             new CommandDefinition("[dbo].[BuscarInscripcion_columna]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
         return result.ToList();
     }
 
@@ -60,10 +61,32 @@ public sealed class InscripcionesRepository : IInscripcionesRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        const string sql = @"
+        SELECT
+            i.IdInscripcion,
+            i.Codigo,
+            c.Codigo AS Codigo_Curso,
+            c.Nivel,
+            i.IsFacturaAutomatica,
+            c.Valor_Inscripcion,
+            c.Valor_Mensual,
+            i.Fecha,
+            i.Fecha1,
+            i.Fecha2,
+            c.Horario,
+            e.Codigo AS Codigo_Estudiante,
+            i.IdEstudiante AS Idestudiante,
+            i.Idcurso,
+            i.Idinstructor,
+            ISNULL(emp.Num_Doc, '') AS Codigo_Facilitador
+        FROM Inscripcion i
+        INNER JOIN Curso c ON c.Idcurso = i.Idcurso
+        INNER JOIN Estudiante e ON e.Idestudiante = i.IdEstudiante
+        LEFT JOIN Empleado emp ON emp.Idempleado = i.Idinstructor
+        WHERE i.IdInscripcion = @IdInscripcion;";
+
         return await conn.QueryFirstOrDefaultAsync<InscripcionDetalleDto>(
-            new CommandDefinition("[dbo].[BuscarInscripcionID]",
-                new { TextoBuscar = idInscripcion },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(sql, new { IdInscripcion = idInscripcion }, cancellationToken: ct));
     }
 
     public async Task<InscripcionImpresionDto?> GetPrintDataAsync(int idInscripcion, CancellationToken ct = default)
@@ -116,13 +139,12 @@ public sealed class InscripcionesRepository : IInscripcionesRepository
         p.Add("@Idlogin", dto.Idlogin);
         p.Add("@IsFacturaAutomatica", dto.IsFacturaAutomatica);
 
-        await conn.ExecuteAsync(
+        // ✅ CORREGIDO: El SP ahora devuelve el ID directamente
+        var id = await conn.ExecuteScalarAsync<int>(
             new CommandDefinition("[dbo].[InsertarInscripcion]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
-        return await conn.ExecuteScalarAsync<int>(
-            "SELECT CAST(SCOPE_IDENTITY() AS INT)",
-            commandType: CommandType.Text);
+        return id;
     }
 
     public async Task UpdateAsync(int idInscripcion, InscripcionSaveDto dto, CancellationToken ct = default)

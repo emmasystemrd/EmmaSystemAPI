@@ -11,4 +11,11 @@ public interface IEstudiantesRepository
     Task UpdateAsync(int idEstudiante, EstudianteSaveDto dto, CancellationToken ct = default);
     Task DeleteAsync(int idEstudiante, CancellationToken ct = default);
     Task<byte[]?> GetFotoAsync(int idEstudiante, CancellationToken ct = default);
+    // ═══════════════════════════════════════════════════════════════
+    // BÚSQUEDA DE ESTUDIANTES ACTIVOS (para selector de Inscripción)
+    // ═══════════════════════════════════════════════════════════════
+    /// <summary>
+    /// Busca estudiantes activos por nombre, código o cédula.
+    /// </summary>
+    Task<IReadOnlyList<EstudianteBusquedaDto>> BuscarEstudiantesActivosAsync(string textoBuscar, CancellationToken ct = default);
 }

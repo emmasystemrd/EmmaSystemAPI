@@ -82,4 +82,17 @@ public sealed class UbicacionRepository : IUbicacionRepository
 
         return result.AsList();
     }
+    public async Task<IReadOnlyList<NacionalidadDto>> GetNacionalidadesAsync(CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        const string sql = @"
+        SELECT Idnacionalidad, Nacionalidad
+        FROM Nacionalidad
+        ORDER BY Nacionalidad";
+
+        var result = await conn.QueryAsync<NacionalidadDto>(
+            new CommandDefinition(sql, cancellationToken: ct));
+
+        return result.AsList();
+    }
 }

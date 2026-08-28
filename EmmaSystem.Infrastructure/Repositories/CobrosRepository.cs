@@ -2,7 +2,9 @@
 using EmmaSystem.Application.DTOs.Cobro;
 using EmmaSystem.Application.Interfaces;
 using EmmaSystem.Infrastructure.Data;
+using Microsoft.Extensions.Logging;
 using System.Data;
+using System.Linq;
 
 namespace EmmaSystem.Infrastructure.Repositories;
 
@@ -10,13 +12,17 @@ public sealed class CobrosRepository : ICobrosRepository
 {
     private readonly ITenantConnectionFactory _connectionFactory;
     private readonly ITenantContext _tenantContext;
+    private readonly ILogger<CobrosRepository> _logger;
     private const int EmpresaIdInterna = 1;
+
     public CobrosRepository(
         ITenantConnectionFactory connectionFactory,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        ILogger<CobrosRepository> logger)
     {
         _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
         _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     // ═══ COBROS NORMALES ═══
@@ -24,19 +30,16 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<IReadOnlyList<CobroListadoDto>> GetAllAsync(int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spmostrar_cobro1]",
                 new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
         return rows.Select(MapToListado).ToList();
     }
 
     public async Task<IReadOnlyList<CobroListadoDto>> SearchAsync(int idEmpresa, DateTime? fecha1, DateTime? fecha2, bool isFecha, string texto, string columna, int adjunto, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var p = new DynamicParameters();
         p.Add("@Fecha1", fecha1 ?? DateTime.MinValue);
         p.Add("@Fecha2", fecha2 ?? DateTime.MaxValue);
@@ -49,47 +52,60 @@ public sealed class CobrosRepository : ICobrosRepository
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_cobro1_columna]", p,
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
         return rows.Select(MapToListado).ToList();
     }
 
     public async Task<CobroDetalleDto?> GetByIdAsync(int idCobro, int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var row = await conn.QueryFirstOrDefaultAsync<CobroDetalleSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_cobro1_id]",
                 new { Idcobro = idCobro, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
-        if (row == null) return null;
-        return MapToDetalle(row);
+        return row == null ? null : MapToDetalle(row);
     }
 
     public async Task<CobroDetalleDto?> GetByCodigoAsync(string codigo, int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var row = await conn.QueryFirstOrDefaultAsync<CobroDetalleSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_cobro1_codigo]",
                 new { TextoBuscar = codigo, Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
-        if (row == null) return null;
-        return MapToDetalle(row);
+        return row == null ? null : MapToDetalle(row);
     }
 
-    public async Task<int> InsertAsync(CobroSaveDto dto, int idLogin, int idEmpresa, CancellationToken ct = default)
+    public async Task<int> InsertAsync(
+    CobroSaveDto dto,
+    int idLogin,
+    int idEmpresa,
+    CancellationToken ct = default)
     {
+        ValidarIntegridadMontoCobro(dto);
+
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        //conn.Open();
         using var transaction = conn.BeginTransaction();
 
         try
         {
+            // El frontend NO determina el número.
+            // Solo se utiliza el prefijo para identificar el tipo.
+            string prefijo = dto.Codigo != null &&
+                             dto.Codigo.StartsWith("AC", StringComparison.OrdinalIgnoreCase)
+                ? "AC"
+                : "RC";
+
+            // Generar consecutivo dentro de la misma transacción.
+            string nuevoCodigo = await GenerarSecuenciaCobroAsync(
+    conn,
+    transaction,
+    prefijo,
+    ct);
+
             var p = new DynamicParameters();
+
             p.Add("@Idcobro", dbType: DbType.Int32, direction: ParameterDirection.Output);
-            p.Add("@Codigo", dto.Codigo);
+            p.Add("@Codigo", nuevoCodigo);
             p.Add("@No_Cuota", dto.No_Cuota);
             p.Add("@Fecha", dto.Fecha);
             p.Add("@Idcliente", dto.Idcliente);
@@ -112,16 +128,22 @@ public sealed class CobrosRepository : ICobrosRepository
             p.Add("@Idempresa", EmpresaIdInterna);
 
             await conn.ExecuteAsync(
-                new CommandDefinition("[dbo].[spinsertar_cobro1]", p,
-                    transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                new CommandDefinition(
+                    "[dbo].[spinsertar_cobro1]",
+                    p,
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
 
             var idCobro = p.Get<int>("@Idcobro");
 
             foreach (var det in dto.Detalles)
             {
-                if (det.Monto <= 0) continue;
+                if (det.Monto <= 0)
+                    continue;
 
                 var pDet = new DynamicParameters();
+
                 pDet.Add("@Idcobro", idCobro);
                 pDet.Add("@Iddocumento", det.Iddocumento);
                 pDet.Add("@Balance", det.Balance);
@@ -138,26 +160,38 @@ public sealed class CobrosRepository : ICobrosRepository
                 pDet.Add("@Monto", det.Monto);
 
                 await conn.ExecuteAsync(
-                    new CommandDefinition("[dbo].[spinsertar_detalle_cobro1]", pDet,
-                        transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                    new CommandDefinition(
+                        "[dbo].[spinsertar_detalle_cobro1]",
+                        pDet,
+                        transaction: transaction,
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: ct));
             }
 
             transaction.Commit();
+
             return idCobro;
         }
-        catch
+        catch (Exception ex)
         {
             transaction.Rollback();
+
+            _logger.LogError(
+                ex,
+                "Error al insertar cobro. Cliente: {IdCliente}, Login: {IdLogin}",
+                dto.Idcliente,
+                idLogin);
+
             throw;
         }
     }
 
     public async Task UpdateAsync(int idCobro, CobroSaveDto dto, int idLogin, CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        //conn.Open();
-        using var transaction = conn.BeginTransaction();
+        ValidarIntegridadMontoCobro(dto);
 
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var transaction = conn.BeginTransaction();
         try
         {
             var p = new DynamicParameters();
@@ -215,9 +249,10 @@ public sealed class CobrosRepository : ICobrosRepository
 
             transaction.Commit();
         }
-        catch
+        catch (Exception ex)
         {
             transaction.Rollback();
+            _logger.LogError(ex, "Error al actualizar cobro. IdCobro: {IdCobro}, Login: {IdLogin}", idCobro, idLogin);
             throw;
         }
     }
@@ -225,9 +260,12 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<int> InsertAvanceAsync(AvanceClienteSaveDto dto, int idLogin, int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
+        using var transaction = conn.BeginTransaction();
+        // ✅ NUEVO: Generar secuencia automáticamente para avances (ocupa huecos)
+        //string nuevoCodigo = await GenerarSecuenciaCobroAsync(conn, "AC");
+        string nuevoCodigo = await GenerarSecuenciaCobroAsync(conn,transaction, "AC",ct);
         var p = new DynamicParameters();
-        p.Add("@Codigo", dto.Codigo);
+        p.Add("@Codigo", nuevoCodigo); // <-- Se usa el código generado de forma segura
         p.Add("@Fecha", dto.Fecha);
         p.Add("@Idcliente", dto.Idcliente);
         p.Add("@Efectivo", dto.Efectivo);
@@ -253,7 +291,6 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task UpdateAvanceAsync(int idCobro, AvanceClienteSaveDto dto, int idLogin, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var p = new DynamicParameters();
         p.Add("@Idcobro", idCobro);
         p.Add("@Fecha", dto.Fecha);
@@ -277,7 +314,6 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task DeleteAsync(int idCobro, int idLogin, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         await conn.ExecuteAsync(
             new CommandDefinition("[dbo].[speliminar_cobro]",
                 new { Idlogin = idLogin, Idcobro = idCobro },
@@ -289,19 +325,16 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<IReadOnlyList<CobroListadoDto>> GetAllAvancesAsync(int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spmostrar_avance_cliente]",
                 new { Idempresa = EmpresaIdInterna },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
         return rows.Select(MapToListado).ToList();
     }
 
     public async Task<IReadOnlyList<CobroListadoDto>> SearchAvancesAsync(int idEmpresa, DateTime? fecha1, DateTime? fecha2, bool isFecha, string texto, string columna, int adjunto, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var p = new DynamicParameters();
         p.Add("@Fecha1", fecha1 ?? DateTime.MinValue);
         p.Add("@Fecha2", fecha2 ?? DateTime.MaxValue);
@@ -314,7 +347,6 @@ public sealed class CobrosRepository : ICobrosRepository
         var rows = await conn.QueryAsync<CobroSqlRow>(
             new CommandDefinition("[dbo].[spbuscar_avance_cliente_columna]", p,
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
         return rows.Select(MapToListado).ToList();
     }
 
@@ -323,7 +355,6 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<IReadOnlyList<DetalleCobroDto>> GetDetallesAsync(int idCobro, int idCliente, DateTime fecha, int idEmpresa, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var p = new DynamicParameters();
         p.Add("@TextoBuscar", idCobro);
         p.Add("@Idpersona", idCliente);
@@ -333,14 +364,12 @@ public sealed class CobrosRepository : ICobrosRepository
         var result = await conn.QueryAsync<DetalleCobroDto>(
             new CommandDefinition("[dbo].[spmostrar_detalle_cobro1]", p,
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
         return result.ToList();
     }
 
     public async Task<int> GetIdDocumentoAsync(int idEmpresa, string tipo, string noFactura, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         return await conn.ExecuteScalarAsync<int>(
             new CommandDefinition("[dbo].[spobtener_iddocumento]",
                 new { Idempresa = EmpresaIdInterna, Tipo = tipo, No_Factura = noFactura },
@@ -352,12 +381,10 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<IReadOnlyList<CobroReporteDto>> GetReporteAsync(int idEmpresa, DateTime fecha1, DateTime fecha2, int idUsuario, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var result = await conn.QueryAsync<CobroReporteDto>(
             new CommandDefinition("[dbo].[r_cobro1]",
                 new { Idempresa = EmpresaIdInterna, Fecha1 = fecha1, Fecha2 = fecha2, Idusuario = idUsuario },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
         return result.ToList();
     }
 
@@ -366,7 +393,6 @@ public sealed class CobrosRepository : ICobrosRepository
     public async Task<byte[]?> GetPdfAsync(int idCobro, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         return await conn.QueryFirstOrDefaultAsync<byte[]?>(
             "SELECT PDF FROM Cobro1 WHERE Idcobro = @Idcobro",
             new { Idcobro = idCobro });
@@ -412,6 +438,136 @@ public sealed class CobrosRepository : ICobrosRepository
         Ref_Tarjeta = r.Ref_Tarjeta ?? "",
         Devuelta = r.Devuelta
     };
+
+    // ═══ NUEVO: Método de validación de integridad (Defensa en profundidad) ═══
+    private void ValidarIntegridadMontoCobro(CobroSaveDto dto)
+    {
+        if (dto.Detalles == null ||
+     !dto.Detalles.Any(d => d.Monto > 0 || d.isr > 0 || d.itr > 0))
+        {
+            throw new InvalidOperationException(
+                "Debe existir al menos un detalle con monto aplicado o retención.");
+        }
+
+        decimal dineroRecibido =
+            dto.Efectivo +
+            dto.Cheque +
+            dto.Transferencia +
+            dto.Tarjeta -
+            dto.Devuelta;
+
+        decimal totalRetenciones =
+            dto.Retencion_ITBIS +
+            dto.Retencion_ISR;
+
+        if (dineroRecibido < 0)
+        {
+            throw new InvalidOperationException(
+                "El dinero recibido no puede ser negativo.");
+        }
+
+        if (dto.Efectivo < 0 ||
+            dto.Cheque < 0 ||
+            dto.Transferencia < 0 ||
+            dto.Tarjeta < 0)
+        {
+            throw new InvalidOperationException(
+                "Los montos de los métodos de pago no pueden ser negativos.");
+        }
+
+        if (dto.Retencion_ITBIS < 0 ||
+            dto.Retencion_ISR < 0)
+        {
+            throw new InvalidOperationException(
+                "Las retenciones no pueden ser negativas.");
+        }
+
+        if (dto.Devuelta < 0)
+        {
+            throw new InvalidOperationException(
+                "El monto de devuelta no puede ser negativo.");
+        }
+
+        foreach (var det in dto.Detalles.Where(d => d.Monto > 0))
+        {
+            if (det.Monto > det.Balance)
+            {
+                throw new InvalidOperationException(
+                    $"El monto aplicado (RD${det.Monto:N2}) excede " +
+                    $"el saldo pendiente (RD${det.Balance:N2}) " +
+                    $"del documento {det.Iddocumento}.");
+            }
+
+            decimal retencionDetalle =
+                det.isr +
+                det.itr;
+
+            decimal montoNetoDetalle =
+                det.Monto -
+                retencionDetalle;
+
+            if (montoNetoDetalle < -0.01m)
+            {
+                throw new InvalidOperationException(
+                    $"La retención del documento {det.Iddocumento} " +
+                    $"no puede exceder el monto aplicado.");
+            }
+        }
+
+        /*
+         * La retención NO se considera dinero recibido.
+         *
+         * Se permiten:
+         *
+         * 1. Solo retención:
+         *    Monto factura = 11,111.11
+         *    Retención    = 1,111.11
+         *    Pago         = 0
+         *
+         * 2. Retención + pago:
+         *    Monto factura = 11,111.11
+         *    Retención    = 1,111.11
+         *    Pago         = 10,000.00
+         *
+         * 3. Pago sin retención:
+         *    Monto factura = 11,111.11
+         *    Retención    = 0
+         *    Pago         = 11,111.11
+         *
+         * Por tanto, no se compara el Monto contra
+         * pagos + retenciones.
+         */
+    }
+
+    private async Task<string> GenerarSecuenciaCobroAsync(
+        IDbConnection conn,
+        IDbTransaction transaction,
+        string prefijo,
+        CancellationToken ct)
+    {
+        string query = $@"
+        SELECT ISNULL(
+            MAX(
+                TRY_CONVERT(
+                    INT,
+                    SUBSTRING(Codigo, 4, LEN(Codigo) - 3)
+                )
+            ),
+            0
+        ) + 1
+        FROM Cobro1 WITH (UPDLOCK, HOLDLOCK)
+        WHERE Codigo LIKE @Prefijo + '-%'
+    ";
+
+        var siguiente = await conn.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                query,
+                new { Prefijo = prefijo },
+                transaction: transaction,
+                cancellationToken: ct));
+
+        return $"{prefijo}-{siguiente:D7}";
+    }
 }
 
 // ═══ Clases internas para mapeo seguro ═══

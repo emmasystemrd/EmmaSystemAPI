@@ -58,19 +58,18 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
     public async Task<EstudianteDetalleDto?> GetByIdAsync(int idEstudiante, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-
         var row = await conn.QueryFirstOrDefaultAsync<EstudianteSqlRow>(
             @"SELECT
-                e.Idestudiante, e.Codigo, e.Nombres, e.Apellido1, e.Apellido2,
-                (e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2) as Estudiante,
-                e.Sexo, e.Foto, e.Tipo_Doc, e.Num_Documento, e.Lugar_Nacimiento,
-                e.Telefono, e.Celular, e.Nacionalidad, e.Fecha_Nacimiento,
-                e.Tipo_Sangre, e.Email, e.Direccion, e.Provincia, e.Municipio,
-                e.Sector, e.Alergico, e.Medicamentos_que_usa,
-                c.Codigo as Codigo_Padre, e.Parentesco, e.Estado
-              FROM Estudiante e
-              LEFT JOIN Cliente1 c ON c.Idcliente = e.Idcliente
-              WHERE e.Idestudiante = @IdEstudiante AND e.Estado != 'E'",
+            e.Idestudiante, e.Codigo, e.Nombres, e.Apellido1, e.Apellido2,
+            (e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2) as Estudiante,
+            e.Sexo, e.Foto, e.Tipo_Doc, e.Num_Documento, e.Lugar_Nacimiento,
+            e.Telefono, e.Celular, e.Nacionalidad, e.Fecha_Nacimiento,
+            e.Tipo_Sangre, e.Email, e.Direccion, e.Provincia, e.Municipio,
+            e.Sector, e.Alergico, e.Medicamentos_que_usa,
+            c.Codigo as Codigo_Padre, e.Parentesco, e.Estado
+          FROM Estudiante e
+          LEFT JOIN Cliente1 c ON c.Idcliente = e.Idcliente
+          WHERE e.Idestudiante = @IdEstudiante AND e.Estado != 'E'",
             new { IdEstudiante = idEstudiante },
             commandType: CommandType.Text);
 
@@ -89,7 +88,7 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
             TieneFoto = row.Foto != null && row.Foto.Length > 0,
             Tipo_Doc = row.Tipo_Doc,
             Num_Documento = row.Num_Documento ?? "",
-            Lugar_Nacimiento = row.Lugar_Nacimiento ?? "",
+            Lugar_Nacimiento = row.Lugar_Nacimiento, // ✅ Ahora es int?
             Telefono = row.Telefono ?? "",
             Celular = row.Celular ?? "",
             Nacionalidad = row.Nacionalidad,
@@ -148,17 +147,14 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
         p.Add("@Sector", dto.Sector ?? (object)DBNull.Value);
         p.Add("@Alergico", dto.Alergico);
         p.Add("@Medicamentos_que_usa", dto.Medicamentos_que_usa);
-        p.Add("@Idcliente", dto.Idcliente ?? (object)DBNull.Value);
-        p.Add("@Parentesco", dto.Parentesco ?? (object)DBNull.Value);
+        p.Add("@Idcliente", dto.Idcliente ?? 0, DbType.Int32);
+        p.Add("@Parentesco", dto.Parentesco ?? 0, DbType.Int32);
         p.Add("@Estado", dto.Estado);
 
-        await conn.ExecuteAsync(
-            new CommandDefinition("[dbo].[InsertarEstudiante]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
-
+        // ✅ CORREGIDO: El SP ahora devuelve el ID directamente
         var id = await conn.ExecuteScalarAsync<int>(
-            "SELECT SCOPE_IDENTITY()",
-            commandType: CommandType.Text);
+            new CommandDefinition("[dbo].[InsertarEstudiante]", p,
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return id;
     }
@@ -196,8 +192,9 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
         p.Add("@Sector", dto.Sector ?? (object)DBNull.Value);
         p.Add("@Alergico", dto.Alergico);
         p.Add("@Medicamentos_que_usa", dto.Medicamentos_que_usa);
-        p.Add("@Idcliente", dto.Idcliente ?? (object)DBNull.Value);
-        p.Add("@Parentesco", dto.Parentesco ?? (object)DBNull.Value);
+        p.Add("@Idcliente", dto.Idcliente ?? 0, DbType.Int32);
+        p.Add("@Parentesco", dto.Parentesco ?? 0, DbType.Int32);
+
         p.Add("@Estado", dto.Estado);
 
         await conn.ExecuteAsync(
@@ -214,6 +211,20 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
                 new { Idestudiante = idEstudiante },
                 commandType: CommandType.StoredProcedure, cancellationToken: ct));
     }
+    // ═══════════════════════════════════════════════════════════════
+    // BÚSQUEDA DE ESTUDIANTES ACTIVOS (para selector de Inscripción)
+    // ═══════════════════════════════════════════════════════════════
+    public async Task<IReadOnlyList<EstudianteBusquedaDto>> BuscarEstudiantesActivosAsync(string textoBuscar, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        var result = await conn.QueryAsync<EstudianteBusquedaDto>(
+            new CommandDefinition("[dbo].[BuscarEstudiante_Activo]",
+            new { TextoBuscar = textoBuscar ?? "" },
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
+        return result.AsList();
+    }
 }
 
 // ═══ Clase interna para mapeo seguro de SQL ═══
@@ -229,7 +240,7 @@ internal class EstudianteSqlRow
     public byte[]? Foto { get; set; }
     public int Tipo_Doc { get; set; }
     public string? Num_Documento { get; set; }
-    public string? Lugar_Nacimiento { get; set; }
+    public int? Lugar_Nacimiento { get; set; } // ✅ CAMBIADO de string a int?
     public string? Telefono { get; set; }
     public string? Celular { get; set; }
     public int? Nacionalidad { get; set; }

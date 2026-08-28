@@ -14,6 +14,7 @@ public class CursoDetalleDto
     public int Duracion { get; set; }
     public int Cupo_Maximo { get; set; }
     public int Idinstructor { get; set; }
+    public string NombreInstructor { get; set; }
     public string Estado { get; set; } = string.Empty;
 
     // Detalles del curso (temario)

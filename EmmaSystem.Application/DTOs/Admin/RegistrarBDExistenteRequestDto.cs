@@ -21,4 +21,7 @@ public class RegistrarBDExistenteRequestDto
     public string NombreBD { get; set; } = string.Empty;
     public string ServidorBD { get; set; } = ".\\EmmaSystem";
     public string? RncCedula { get; set; }
+
+    // ─── NUEVO ───
+    public bool EsDesktop { get; set; } = false;
 }

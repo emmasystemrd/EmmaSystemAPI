@@ -7,7 +7,6 @@ public class AsistenciaMatrixDto
     public int Edad { get; set; }
     public string Telefono { get; set; } = string.Empty;
 
-    // Días del 1 al 31
     public string? Dia_1 { get; set; }
     public string? Dia_2 { get; set; }
     public string? Dia_3 { get; set; }
@@ -39,4 +38,6 @@ public class AsistenciaMatrixDto
     public string? Dia_29 { get; set; }
     public string? Dia_30 { get; set; }
     public string? Dia_31 { get; set; }
+
+    public List<int> DiasConAsistencia { get; set; } = new();
 }

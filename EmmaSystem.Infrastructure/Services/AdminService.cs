@@ -55,8 +55,8 @@ public sealed partial class AdminService : IAdminService
                         "máximo 128 caracteres.");
         }
 
-        // 2. Validar que la BD no exista
-        if (primeraEmpresa != null && !string.IsNullOrWhiteSpace(primeraEmpresa.NombreBD)
+        // 2. Validar que la BD no exista (solo aplica a registro server-side)
+        if (!request.EsDesktop && primeraEmpresa != null && !string.IsNullOrWhiteSpace(primeraEmpresa.NombreBD)
             && NombreBdValidoRegex().IsMatch(primeraEmpresa.NombreBD))
         {
             var bdExiste = await conn.ExecuteScalarAsync<int>(
@@ -69,16 +69,18 @@ public sealed partial class AdminService : IAdminService
                 errores.Add($"La base de datos '{primeraEmpresa.NombreBD}' ya existe en el servidor.");
         }
 
-        // 3. Validar que EmmaSystem_Template exista
-        var templateExiste = await conn.ExecuteScalarAsync<int>(
-            new CommandDefinition(
-                "SELECT COUNT(*) FROM sys.databases WHERE name = @Nombre",
-                new { Nombre = TemplateDbName },
-                cancellationToken: ct));
+        // 3. Validar que EmmaSystem_Template exista (solo aplica a registro server-side)
+        if (!request.EsDesktop)
+        {
+            var templateExiste = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM sys.databases WHERE name = @Nombre",
+                    new { Nombre = TemplateDbName },
+                    cancellationToken: ct));
 
-        if (templateExiste == 0)
-            errores.Add($"La base de datos plantilla '{TemplateDbName}' no existe en el servidor. Contacte al administrador.");
-
+            if (templateExiste == 0)
+                errores.Add($"La base de datos plantilla '{TemplateDbName}' no existe en el servidor. Contacte al administrador.");
+        }
         // 4. Validar email admin único
         if (!string.IsNullOrWhiteSpace(request.EmailAdmin))
         {
@@ -171,73 +173,73 @@ public sealed partial class AdminService : IAdminService
         // Solo se hace RESTORE WITH MOVE, sin BACKUP previo
 
         var nombreBDSeguro = empresa.NombreBD.Replace("]", "]]");
-        const string backupPath = @"C:\EmmaSystem\EmmaSystem_Template.bak";
+        var bdCreada = false;
 
-        // 1a. Verificar que el backup estático exista
-        if (!File.Exists(backupPath))
+        if (!request.EsDesktop)
         {
-            throw new InvalidOperationException(
-                $"El backup estático '{backupPath}' no existe. " +
-                "Ejecute BACKUP DATABASE [EmmaSystem_Template] TO DISK = 'C:\\EmmaSystem\\EmmaSystem_Template.bak' en SSMS.");
-        }
+            // ═══ PASO 1: Restaurar BD Template desde backup estático (solo server-side) ═══
+            const string backupPath = @"C:\EmmaSystem\EmmaSystem_Template.bak";
 
-        // 1b. Obtener rutas lógicas del backup para el MOVE
-        const string sqlFileList = "RESTORE FILELISTONLY FROM DISK = @BackupPath";
-        var fileList = await conn.QueryAsync<dynamic>(
-            new CommandDefinition(sqlFileList,
-                new { BackupPath = backupPath },
-                cancellationToken: ct));
+            if (!File.Exists(backupPath))
+            {
+                throw new InvalidOperationException(
+                    $"El backup estático '{backupPath}' no existe. " +
+                    "Ejecute BACKUP DATABASE [EmmaSystem_Template] TO DISK = 'C:\\EmmaSystem\\EmmaSystem_Template.bak' en SSMS.");
+            }
 
-        var logicalDataName = fileList.First(f => f.Type == "D").LogicalName as string;
-        var logicalLogName = fileList.First(f => f.Type == "L").LogicalName as string;
+            const string sqlFileList = "RESTORE FILELISTONLY FROM DISK = @BackupPath";
+            var fileList = await conn.QueryAsync<dynamic>(
+                new CommandDefinition(sqlFileList,
+                    new { BackupPath = backupPath },
+                    cancellationToken: ct));
 
-        // 1c. Determinar carpetas de datos/log por defecto del servidor
-        var dataPath = await conn.ExecuteScalarAsync<string>(
-            new CommandDefinition(
-                "SELECT SERVERPROPERTY('InstanceDefaultDataPath')",
-                cancellationToken: ct)) ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.EMMASYSTEM\MSSQL\DATA";
+            var logicalDataName = fileList.First(f => f.Type == "D").LogicalName as string;
+            var logicalLogName = fileList.First(f => f.Type == "L").LogicalName as string;
 
-        var logPath = await conn.ExecuteScalarAsync<string>(
-            new CommandDefinition(
-                "SELECT SERVERPROPERTY('InstanceDefaultLogPath')",
-                cancellationToken: ct)) ?? dataPath;
+            var dataPath = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(
+                    "SELECT SERVERPROPERTY('InstanceDefaultDataPath')",
+                    cancellationToken: ct)) ?? @"C:\Program Files\Microsoft SQL Server\MSSQL16.EMMASYSTEM\MSSQL\DATA";
 
-        var newDataFile = Path.Combine(dataPath, $"{empresa.NombreBD}.mdf");
-        var newLogFile = Path.Combine(logPath, $"{empresa.NombreBD}_log.ldf");
+            var logPath = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(
+                    "SELECT SERVERPROPERTY('InstanceDefaultLogPath')",
+                    cancellationToken: ct)) ?? dataPath;
 
-        // 1d. Restaurar como nueva BD
-        var sqlRestore = $@"
-    RESTORE DATABASE [{nombreBDSeguro}] 
-    FROM DISK = @BackupPath 
-    WITH 
+            var newDataFile = Path.Combine(dataPath, $"{empresa.NombreBD}.mdf");
+            var newLogFile = Path.Combine(logPath, $"{empresa.NombreBD}_log.ldf");
+
+            var sqlRestore = $@"
+    RESTORE DATABASE [{nombreBDSeguro}]
+    FROM DISK = @BackupPath
+    WITH
         MOVE @LogicalData TO @NewDataFile,
         MOVE @LogicalLog TO @NewLogFile,
         REPLACE";
 
-        try
-        {
-            await conn.ExecuteAsync(
-                new CommandDefinition(sqlRestore,
-                    new
-                    {
-                        BackupPath = backupPath,
-                        LogicalData = logicalDataName,
-                        NewDataFile = newDataFile,
-                        LogicalLog = logicalLogName,
-                        NewLogFile = newLogFile
-                    },
-                    commandTimeout: 120,
-                    cancellationToken: ct));
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"Error al restaurar la base de datos plantilla: {ex.Message}", ex);
-        }
+            try
+            {
+                await conn.ExecuteAsync(
+                    new CommandDefinition(sqlRestore,
+                        new
+                        {
+                            BackupPath = backupPath,
+                            LogicalData = logicalDataName,
+                            NewDataFile = newDataFile,
+                            LogicalLog = logicalLogName,
+                            NewLogFile = newLogFile
+                        },
+                        commandTimeout: 120,
+                        cancellationToken: ct));
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Error al restaurar la base de datos plantilla: {ex.Message}", ex);
+            }
 
-        // ✅ Ya no hay backup temporal que limpiar
-        var bdCreada = true;
-
+            bdCreada = true;
+        }
         try
         {
             // ═══ PASO 2: Transacción para inserts ═══
@@ -414,34 +416,37 @@ public sealed partial class AdminService : IAdminService
         // ═══ VALIDACIONES ═══
         var errores = new List<string>();
 
-        // 1. Validar que la BD exista en el servidor
-        var bdExiste = await conn.ExecuteScalarAsync<int>(
-            new CommandDefinition(
-                "SELECT COUNT(*) FROM sys.databases WHERE name = @Nombre",
-                new { Nombre = request.NombreBD },
-                cancellationToken: ct));
-
-        if (bdExiste == 0)
-            errores.Add($"La base de datos '{request.NombreBD}' no existe en el servidor.");
-
-        // 2. Validar que la BD tenga tabla Empresa (es una BD de EmmaSystem)
-        if (bdExiste > 0)
+        // 1. Validar que la BD exista en el servidor (solo aplica a server-side; en desktop ya se validó localmente)
+        if (!request.EsDesktop)
         {
-            try
-            {
-                var connectionString = $"Server={request.ServidorBD};Database={request.NombreBD};User Id={SqlUser};Password={SqlPassword};TrustServerCertificate=True;";
-                using var bdConn = new SqlConnection(connectionString);
-                await bdConn.OpenAsync(ct);
+            var bdExiste = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM sys.databases WHERE name = @Nombre",
+                    new { Nombre = request.NombreBD },
+                    cancellationToken: ct));
 
-                var tablaExiste = await bdConn.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Empresa'");
+            if (bdExiste == 0)
+                errores.Add($"La base de datos '{request.NombreBD}' no existe en el servidor.");
 
-                if (tablaExiste == 0)
-                    errores.Add($"La base de datos '{request.NombreBD}' no parece ser una base de datos de EmmaSystem (no tiene tabla Empresa).");
-            }
-            catch (Exception ex)
+            // 2. Validar que la BD tenga tabla Empresa
+            if (bdExiste > 0)
             {
-                errores.Add($"No se pudo conectar a la base de datos '{request.NombreBD}': {ex.Message}");
+                try
+                {
+                    var connectionString = $"Server={request.ServidorBD};Database={request.NombreBD};User Id={SqlUser};Password={SqlPassword};TrustServerCertificate=True;";
+                    using var bdConn = new SqlConnection(connectionString);
+                    await bdConn.OpenAsync(ct);
+
+                    var tablaExiste = await bdConn.ExecuteScalarAsync<int>(
+                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Empresa'");
+
+                    if (tablaExiste == 0)
+                        errores.Add($"La base de datos '{request.NombreBD}' no parece ser una base de datos de EmmaSystem (no tiene tabla Empresa).");
+                }
+                catch (Exception ex)
+                {
+                    errores.Add($"No se pudo conectar a la base de datos '{request.NombreBD}': {ex.Message}");
+                }
             }
         }
 

@@ -15,4 +15,8 @@ public class InscripcionDetalleDto
     public string Horario { get; set; } = string.Empty;
     public string Codigo_Estudiante { get; set; } = string.Empty;
     public string Codigo_Facilitador { get; set; } = string.Empty;
+
+    public int Idestudiante { get; set; }
+    public int Idcurso { get; set; }
+    public int Idinstructor { get; set; }
 }

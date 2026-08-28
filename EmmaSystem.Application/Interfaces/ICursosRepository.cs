@@ -16,4 +16,12 @@ public interface ICursosRepository
 
     // Detalles
     Task<IReadOnlyList<CursoDetalleItemDto>> GetDetallesAsync(int idCurso, CancellationToken ct = default);
+
+    // ═══════════════════════════════════════════════════════════════
+    // CURSOS POR INSTRUCTOR (para Asistencia)
+    // ═══════════════════════════════════════════════════════════════
+    /// <summary>
+    /// Obtiene los cursos activos asignados a un instructor específico.
+    /// </summary>
+    Task<IReadOnlyList<CursoListadoDto>> GetByInstructorAsync(int idInstructor, CancellationToken ct = default);
 }

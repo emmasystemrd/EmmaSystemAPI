@@ -64,32 +64,41 @@ public sealed class EstudiantesController : ControllerBase
         return Ok(await _repo.SearchAsync(texto ?? "", ct));
     }
 
-    /// <summary>
-    /// Crea un nuevo estudiante
-    /// </summary>
     [HttpPost]
     [Permission(Modules.Educacion, Operations.Crear)]
     public async Task<ActionResult<int>> Create([FromBody] EstudianteSaveDto dto, CancellationToken ct)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
 
-        var id = await _repo.InsertAsync(dto, ct);
-        return CreatedAtAction(nameof(GetById), new { id = id }, id);
+        try
+        {
+            var id = await _repo.InsertAsync(dto, ct);
+            return CreatedAtAction(nameof(GetById), new { id = id }, id);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
-    /// <summary>
-    /// Actualiza un estudiante existente
-    /// </summary>
     [HttpPut("{id:int}")]
     [Permission(Modules.Educacion, Operations.Editar)]
     public async Task<IActionResult> Update(int id, [FromBody] EstudianteSaveDto dto, CancellationToken ct)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
 
-        await _repo.UpdateAsync(id, dto, ct);
-        return Ok(new { message = "Estudiante actualizado correctamente." });
+        try
+        {
+            await _repo.UpdateAsync(id, dto, ct);
+            return Ok(new { message = "Estudiante actualizado correctamente." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
-
     /// <summary>
     /// Elimina un estudiante (cambio de estado a 'E')
     /// </summary>
@@ -99,5 +108,21 @@ public sealed class EstudiantesController : ControllerBase
     {
         await _repo.DeleteAsync(id, ct);
         return Ok(new { message = "Estudiante eliminado correctamente." });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // BÚSQUEDA DE ESTUDIANTES ACTIVOS (para selector de Inscripción)
+    // ═══════════════════════════════════════════════════════════════
+    /// <summary>
+    /// Busca estudiantes activos por nombre, código o cédula.
+    /// </summary>
+    [HttpGet("buscar-activos")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<IReadOnlyList<EstudianteBusquedaDto>>> BuscarActivos(
+        [FromQuery] string texto = "",
+        CancellationToken ct = default)
+    {
+        var result = await _repo.BuscarEstudiantesActivosAsync(texto, ct);
+        return Ok(result);
     }
 }

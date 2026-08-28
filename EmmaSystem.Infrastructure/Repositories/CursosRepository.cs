@@ -48,10 +48,42 @@ public sealed class CursosRepository : ICursosRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        const string sql = @"
+        SELECT
+            c.Idcurso,
+            c.Codigo,
+            c.Curso,
+            c.Descripcion,
+            c.Nivel,
+            c.Horario,
+            c.Valor_Inscripcion,
+            c.Valor_Mensual,
+            c.Tipo_Duracion,
+            c.Duracion,
+            c.Cupo_Maximo,
+            c.Idinstructor,
+            ISNULL(LTRIM(RTRIM(e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2)), '') AS NombreInstructor,
+            c.Estado
+        FROM Curso c
+        LEFT JOIN Empleado e ON e.Idempleado = c.Idinstructor
+        WHERE c.Estado <> 'E'
+          AND (
+                @TextoBuscar = ''
+             OR c.Codigo LIKE '%' + @TextoBuscar + '%'
+             OR c.Curso LIKE '%' + @TextoBuscar + '%'
+             OR c.Descripcion LIKE '%' + @TextoBuscar + '%'
+             OR c.Nivel LIKE '%' + @TextoBuscar + '%'
+             OR e.Nombres LIKE '%' + @TextoBuscar + '%'
+             OR e.Apellido1 LIKE '%' + @TextoBuscar + '%'
+          )
+        ORDER BY c.Codigo";
+
         var result = await conn.QueryAsync<CursoListadoDto>(
-            new CommandDefinition("[dbo].[BuscarCurso_Activo]",
-                new { TextoBuscar = texto },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                sql,
+                new { TextoBuscar = texto ?? "" },
+                commandType: CommandType.Text,
+                cancellationToken: ct));
 
         return result.ToList();
     }
@@ -72,10 +104,15 @@ public sealed class CursosRepository : ICursosRepository
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
+        // ✅ CORREGIDO: Se agrega JOIN con Empleado para obtener NombreInstructor
         var curso = await conn.QueryFirstOrDefaultAsync(
-            "SELECT Idcurso, Codigo, Curso, Descripcion, Nivel, Horario, Valor_Inscripcion, Valor_Mensual, " +
-            "Tipo_Duracion, Duracion, Cupo_Maximo, Idinstructor, Estado " +
-            "FROM Curso WHERE Idcurso = @Idcurso AND Estado != 'E'",
+            @"SELECT c.Idcurso, c.Codigo, c.Curso, c.Descripcion, c.Nivel, c.Horario, 
+                 c.Valor_Inscripcion, c.Valor_Mensual, c.Tipo_Duracion, c.Duracion, c.Cupo_Maximo, 
+                 c.Idinstructor, c.Estado,
+                 ISNULL(LTRIM(RTRIM(e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2)), 'Sin Asignar') AS NombreInstructor
+          FROM Curso c
+          LEFT JOIN Empleado e ON e.Idempleado = c.Idinstructor
+          WHERE c.Idcurso = @Idcurso AND c.Estado != 'E'",
             new { Idcurso = idCurso },
             commandType: CommandType.Text);
 
@@ -83,8 +120,8 @@ public sealed class CursosRepository : ICursosRepository
 
         var detalles = await conn.QueryAsync<CursoDetalleItemDto>(
             new CommandDefinition("[dbo].[MostrarDetalleCurso]",
-                new { Idcurso = idCurso },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new { Idcurso = idCurso },
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
 
         return new CursoDetalleDto
         {
@@ -100,6 +137,7 @@ public sealed class CursosRepository : ICursosRepository
             Duracion = (int)curso.Duracion,
             Cupo_Maximo = (int)curso.Cupo_Maximo,
             Idinstructor = (int)curso.Idinstructor,
+            NombreInstructor = (string?)curso.NombreInstructor ?? "", // ✅ MAPEADO
             Estado = (string?)curso.Estado ?? "A",
             Detalles = detalles.ToList()
         };
@@ -240,4 +278,17 @@ public sealed class CursosRepository : ICursosRepository
 
         return result.ToList();
     }
+    // ═══════════════════════════════════════════════════════════════
+    // CURSOS POR INSTRUCTOR (para Asistencia)
+    // ═══════════════════════════════════════════════════════════════
+    public async Task<IReadOnlyList<CursoListadoDto>> GetByInstructorAsync(int idInstructor, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        var result = await conn.QueryAsync<CursoListadoDto>(
+            new CommandDefinition("[dbo].[BuscarCurso_ByInstructor]",
+            new { Idinstructor = idInstructor },
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
+        return result.ToList();
+    }
+
 }

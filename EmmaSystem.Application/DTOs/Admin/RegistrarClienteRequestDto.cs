@@ -18,6 +18,9 @@ public class RegistrarClienteRequestDto
 
     // ─── Empresas (array, compatible con el frontend) ───
     public List<EmpresaRegistroDto> Empresas { get; set; } = new();
+
+    // ─── NUEVO: cliente Desktop crea la BD localmente, la API no debe tocarla ───
+    public bool EsDesktop { get; set; } = false;
 }
 
 public class EmpresaRegistroDto

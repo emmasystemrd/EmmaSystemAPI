@@ -87,4 +87,17 @@ public sealed class UbicacionController : ControllerBase
         var result = await _repo.GetRutasAsync(GetIdEmpresa(), ct);
         return Ok(result);
     }
+    // ═══════════════════════════════════════════════════════════════
+    // NACIONALIDADES
+    // ═══════════════════════════════════════════════════════════════
+    /// <summary>
+    /// Obtiene todas las nacionalidades disponibles.
+    /// </summary>
+    [HttpGet("nacionalidades")]
+    [AllowAnonymous]
+    public async Task<ActionResult<IReadOnlyList<NacionalidadDto>>> GetNacionalidades(CancellationToken ct)
+    {
+        var result = await _repo.GetNacionalidadesAsync(ct);
+        return Ok(result);
+    }
 }

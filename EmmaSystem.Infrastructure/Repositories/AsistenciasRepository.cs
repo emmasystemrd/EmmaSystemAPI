@@ -124,7 +124,12 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
     }
 
     public async Task<List<AsistenciaMatrixDto>> GetMatrixAsistenciaAsync(
-        DateTime fecha1, DateTime fecha2, int idCurso, int? idDetalleCurso, int idInstructor, CancellationToken ct = default)
+      DateTime fecha1,
+      DateTime fecha2,
+      int idCurso,
+      int? idDetalleCurso,
+      int idInstructor,
+      CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
 
@@ -135,11 +140,33 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
         p.Add("@Iddetalle_Curso", idDetalleCurso);
         p.Add("@Idinstructor", idInstructor);
 
-        var result = await conn.QueryAsync<AsistenciaMatrixDto>(
-            new CommandDefinition("[dbo].[RAsistencia_Estudiante]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+        var result = (await conn.QueryAsync<AsistenciaMatrixDto>(
+            new CommandDefinition(
+                "[dbo].[RAsistencia_Estudiante]",
+                p,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct)))
+            .ToList();
 
-        return result.ToList();
+        var propiedadesDias = typeof(AsistenciaMatrixDto)
+            .GetProperties()
+            .Where(x => x.Name.StartsWith("Dia_"))
+            .OrderBy(x => int.Parse(x.Name.Substring(4)))
+            .ToList();
+
+        var diasConAsistencia = propiedadesDias
+            .Where(propiedad => result.Any(x =>
+                !string.IsNullOrWhiteSpace(
+                    propiedad.GetValue(x)?.ToString())))
+            .Select(propiedad => int.Parse(propiedad.Name.Substring(4)))
+            .ToList();
+
+        foreach (var item in result)
+        {
+            item.DiasConAsistencia = diasConAsistencia;
+        }
+
+        return result;
     }
     public async Task<AsistenciaFormularioDto> GetAsistenciaSemanalAsync(
     DateTime fecha1, DateTime fecha2, int idCurso, int? idDetalleCurso, int idInstructor,
@@ -203,5 +230,25 @@ public sealed class AsistenciasRepository : IAsistenciasRepository
             FechasSemanas = fechasSemanas,
             Estudiantes = estudiantes
         };
+    }
+    // ═══════════════════════════════════════════════════════════════
+    // REPORTE FILTRADO DE ASISTENCIA
+    // ═══════════════════════════════════════════════════════════════
+    public async Task<List<AsistenciaReporteFiltradoDto>> GetReporteFiltradoAsync(
+        DateTime fecha1, DateTime fecha2, int? idCurso, int? idInstructor, int? idEstudiante,
+        CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        var p = new DynamicParameters();
+        p.Add("@Fecha1", fecha1.Date);
+        p.Add("@Fecha2", fecha2.Date);
+        p.Add("@Idcurso", idCurso ?? (object)DBNull.Value);
+        p.Add("@Idinstructor", idInstructor ?? (object)DBNull.Value);
+        p.Add("@Idestudiante", idEstudiante ?? (object)DBNull.Value);
+
+        var result = await conn.QueryAsync<AsistenciaReporteFiltradoDto>(
+            new CommandDefinition("[dbo].[RAsistencia_Filtrada]", p,
+            commandType: CommandType.StoredProcedure, cancellationToken: ct));
+        return result.ToList();
     }
 }
