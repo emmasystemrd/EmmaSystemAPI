@@ -55,21 +55,28 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
 
     // ═══ DETALLE COMPLETO ═══
 
+   // EmmaSystem.Infrastructure/Repositories/EstudiantesRepository.cs
+// REEMPLAZAR el método GetByIdAsync completo:
     public async Task<EstudianteDetalleDto?> GetByIdAsync(int idEstudiante, CancellationToken ct = default)
     {
         using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
         var row = await conn.QueryFirstOrDefaultAsync<EstudianteSqlRow>(
             @"SELECT
-            e.Idestudiante, e.Codigo, e.Nombres, e.Apellido1, e.Apellido2,
-            (e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2) as Estudiante,
-            e.Sexo, e.Foto, e.Tipo_Doc, e.Num_Documento, e.Lugar_Nacimiento,
-            e.Telefono, e.Celular, e.Nacionalidad, e.Fecha_Nacimiento,
-            e.Tipo_Sangre, e.Email, e.Direccion, e.Provincia, e.Municipio,
-            e.Sector, e.Alergico, e.Medicamentos_que_usa,
-            c.Codigo as Codigo_Padre, e.Parentesco, e.Estado
-          FROM Estudiante e
-          LEFT JOIN Cliente1 c ON c.Idcliente = e.Idcliente
-          WHERE e.Idestudiante = @IdEstudiante AND e.Estado != 'E'",
+                e.Idestudiante, e.Codigo, e.Nombres, e.Apellido1, e.Apellido2,
+                LTRIM(RTRIM(ISNULL(e.Nombres,'') + ' ' + ISNULL(e.Apellido1,'') + ' ' + ISNULL(e.Apellido2,''))) AS Estudiante,
+                e.Sexo, e.Foto, e.Tipo_Doc, e.Num_Documento, e.Lugar_Nacimiento,
+                e.Telefono, e.Celular, e.Nacionalidad, e.Fecha_Nacimiento,
+                e.Tipo_Sangre, e.Email, e.Direccion, e.Provincia, e.Municipio,
+                e.Sector, e.Alergico, e.Medicamentos_que_usa,
+                e.Idcliente,
+                c.Codigo        AS Codigo_Padre,
+                c.Razon_Social  AS Tutor_Nombre,
+                c.Num_Documento AS Tutor_Documento,
+                c.Telefono      AS Tutor_Telefono,
+                e.Parentesco, e.Estado
+              FROM Estudiante e
+              LEFT JOIN Cliente1 c ON c.Idcliente = e.Idcliente
+              WHERE e.Idestudiante = @IdEstudiante AND e.Estado != 'E'",
             new { IdEstudiante = idEstudiante },
             commandType: CommandType.Text);
 
@@ -88,7 +95,7 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
             TieneFoto = row.Foto != null && row.Foto.Length > 0,
             Tipo_Doc = row.Tipo_Doc,
             Num_Documento = row.Num_Documento ?? "",
-            Lugar_Nacimiento = row.Lugar_Nacimiento, // ✅ Ahora es int?
+            Lugar_Nacimiento = row.Lugar_Nacimiento,
             Telefono = row.Telefono ?? "",
             Celular = row.Celular ?? "",
             Nacionalidad = row.Nacionalidad,
@@ -101,11 +108,18 @@ public sealed class EstudiantesRepository : IEstudiantesRepository
             Sector = row.Sector,
             Alergico = row.Alergico ?? "",
             Medicamentos_que_usa = row.Medicamentos_que_usa ?? "",
+            Idcliente = row.Idcliente is > 0 ? row.Idcliente : null,
             Codigo_Padre = row.Codigo_Padre ?? "",
+            Tutor_Nombre = row.Tutor_Nombre ?? "",
+            Tutor_Documento = row.Tutor_Documento ?? "",
+            Tutor_Telefono = row.Tutor_Telefono ?? "",
             Parentesco = row.Parentesco,
             Estado = row.Estado ?? "A"
         };
     }
+
+// En la clase EstudianteSqlRow AGREGAR:
+
 
     // ═══ FOTO ═══
 
@@ -256,4 +270,9 @@ internal class EstudianteSqlRow
     public string? Codigo_Padre { get; set; }
     public int? Parentesco { get; set; }
     public string? Estado { get; set; }
+
+    public int? Idcliente { get; set; }
+    public string? Tutor_Nombre { get; set; }
+    public string? Tutor_Documento { get; set; }
+    public string? Tutor_Telefono { get; set; }
 }

@@ -13,7 +13,7 @@ public class EstudianteDetalleDto
     public bool TieneFoto { get; set; }
     public int Tipo_Doc { get; set; }
     public string Num_Documento { get; set; } = string.Empty;
-    public int? Lugar_Nacimiento { get; set; } // ✅ CAMBIADO de string a int?
+    public int? Lugar_Nacimiento { get; set; }
     public string Telefono { get; set; } = string.Empty;
     public string Celular { get; set; } = string.Empty;
     public int? Nacionalidad { get; set; }
@@ -26,7 +26,11 @@ public class EstudianteDetalleDto
     public long? Sector { get; set; }
     public string Alergico { get; set; } = string.Empty;
     public string Medicamentos_que_usa { get; set; } = string.Empty;
+    public int? Idcliente { get; set; }
     public string Codigo_Padre { get; set; } = string.Empty;
+    public string Tutor_Nombre { get; set; } = string.Empty;
+    public string Tutor_Documento { get; set; } = string.Empty;
+    public string Tutor_Telefono { get; set; } = string.Empty;
     public int? Parentesco { get; set; }
     public string Estado { get; set; } = string.Empty;
 }

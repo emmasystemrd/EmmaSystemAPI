@@ -126,6 +126,12 @@
                 builder.Services.AddScoped<IDgiiService, DgiiService>();
             // Registrar el servicio de versiones
             builder.Services.AddScoped<IVersionService, VersionService>();
+            builder.Services.AddHttpClient<IBcrdService, BcrdService>(client =>
+            {
+                client.BaseAddress = new Uri(
+                    builder.Configuration["BCRD:BaseUrl"]!);
+                client.Timeout = TimeSpan.FromSeconds(30);
+            });
             // ──────────────────────────────────────────────
             // 7) Filtros Globales
             // ──────────────────────────────────────────────

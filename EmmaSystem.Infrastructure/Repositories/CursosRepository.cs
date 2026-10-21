@@ -15,38 +15,55 @@ public sealed class CursosRepository : ICursosRepository
         ITenantConnectionFactory connectionFactory,
         ITenantContext tenantContext)
     {
-        _connectionFactory = connectionFactory ?? throw new ArgumentNullException(nameof(connectionFactory));
-        _tenantContext = tenantContext ?? throw new ArgumentNullException(nameof(tenantContext));
+        _connectionFactory = connectionFactory
+            ?? throw new ArgumentNullException(nameof(connectionFactory));
+
+        _tenantContext = tenantContext
+            ?? throw new ArgumentNullException(nameof(tenantContext));
     }
 
-    // ═══ LISTADOS ═══
+    // ============================================================
+    // LISTADOS
+    // ============================================================
 
-    public async Task<IReadOnlyList<CursoListadoDto>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<CursoListadoDto>> GetAllAsync(
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         var result = await conn.QueryAsync<CursoListadoDto>(
-            new CommandDefinition("[dbo].[MostrarCurso]",
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                "[dbo].[MostrarCurso]",
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         return result.ToList();
     }
 
-    public async Task<IReadOnlyList<CursoListadoDto>> SearchAsync(string texto, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CursoListadoDto>> SearchAsync(
+        string texto,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         var result = await conn.QueryAsync<CursoListadoDto>(
-            new CommandDefinition("[dbo].[BuscarCurso]",
+            new CommandDefinition(
+                "[dbo].[BuscarCurso]",
                 new { TextoBuscar = texto },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         return result.ToList();
     }
 
-    public async Task<IReadOnlyList<CursoListadoDto>> SearchActivosAsync(string texto, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CursoListadoDto>> SearchActivosAsync(
+        string texto,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         const string sql = @"
         SELECT
@@ -58,14 +75,20 @@ public sealed class CursosRepository : ICursosRepository
             c.Horario,
             c.Valor_Inscripcion,
             c.Valor_Mensual,
-            c.Tipo_Duracion,
-            c.Duracion,
+            c.Fecha_Inicio,
+            c.Fecha_Final,
             c.Cupo_Maximo,
             c.Idinstructor,
-            ISNULL(LTRIM(RTRIM(e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2)), '') AS NombreInstructor,
+            ISNULL(
+                LTRIM(RTRIM(
+                    e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2
+                )),
+                ''
+            ) AS NombreInstructor,
             c.Estado
         FROM Curso c
-        LEFT JOIN Empleado e ON e.Idempleado = c.Idinstructor
+        LEFT JOIN Empleado e
+            ON e.Idempleado = c.Idinstructor
         WHERE c.Estado <> 'E'
           AND (
                 @TextoBuscar = ''
@@ -88,40 +111,75 @@ public sealed class CursosRepository : ICursosRepository
         return result.ToList();
     }
 
-    public async Task<CursoListadoDto?> GetByCodigoAsync(string codigo, CancellationToken ct = default)
+    public async Task<CursoListadoDto?> GetByCodigoAsync(
+        string codigo,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         return await conn.QueryFirstOrDefaultAsync<CursoListadoDto>(
-            new CommandDefinition("[dbo].[BuscarCurso_Codigo]",
+            new CommandDefinition(
+                "[dbo].[BuscarCurso_Codigo]",
                 new { TextoBuscar = codigo },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
     }
 
-    // ═══ DETALLE COMPLETO ═══
+    // ============================================================
+    // DETALLE COMPLETO
+    // ============================================================
 
-    public async Task<CursoDetalleDto?> GetByIdAsync(int idCurso, CancellationToken ct = default)
+    public async Task<CursoDetalleDto?> GetByIdAsync(
+        int idCurso,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
-        // ✅ CORREGIDO: Se agrega JOIN con Empleado para obtener NombreInstructor
+        const string sql = @"
+        SELECT
+            c.Idcurso,
+            c.Codigo,
+            c.Curso,
+            c.Descripcion,
+            c.Nivel,
+            c.Horario,
+            c.Valor_Inscripcion,
+            c.Valor_Mensual,
+            c.Fecha_Inicio,
+            c.Fecha_Final,
+            c.Cupo_Maximo,
+            c.Idinstructor,
+            c.Estado,
+            ISNULL(
+                LTRIM(RTRIM(
+                    e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2
+                )),
+                'Sin Asignar'
+            ) AS NombreInstructor
+        FROM Curso c
+        LEFT JOIN Empleado e
+            ON e.Idempleado = c.Idinstructor
+        WHERE c.Idcurso = @Idcurso
+          AND c.Estado != 'E'";
+
         var curso = await conn.QueryFirstOrDefaultAsync(
-            @"SELECT c.Idcurso, c.Codigo, c.Curso, c.Descripcion, c.Nivel, c.Horario, 
-                 c.Valor_Inscripcion, c.Valor_Mensual, c.Tipo_Duracion, c.Duracion, c.Cupo_Maximo, 
-                 c.Idinstructor, c.Estado,
-                 ISNULL(LTRIM(RTRIM(e.Nombres + ' ' + e.Apellido1 + ' ' + e.Apellido2)), 'Sin Asignar') AS NombreInstructor
-          FROM Curso c
-          LEFT JOIN Empleado e ON e.Idempleado = c.Idinstructor
-          WHERE c.Idcurso = @Idcurso AND c.Estado != 'E'",
-            new { Idcurso = idCurso },
-            commandType: CommandType.Text);
+            new CommandDefinition(
+                sql,
+                new { Idcurso = idCurso },
+                commandType: CommandType.Text,
+                cancellationToken: ct));
 
-        if (curso == null) return null;
+        if (curso == null)
+            return null;
 
         var detalles = await conn.QueryAsync<CursoDetalleItemDto>(
-            new CommandDefinition("[dbo].[MostrarDetalleCurso]",
-            new { Idcurso = idCurso },
-            commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                "[dbo].[MostrarDetalleCurso]",
+                new { Idcurso = idCurso },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         return new CursoDetalleDto
         {
@@ -133,28 +191,42 @@ public sealed class CursosRepository : ICursosRepository
             Horario = (string?)curso.Horario ?? "",
             Valor_Inscripcion = (decimal)curso.Valor_Inscripcion,
             Valor_Mensual = (decimal)curso.Valor_Mensual,
-            Tipo_Duracion = (string?)curso.Tipo_Duracion ?? "",
-            Duracion = (int)curso.Duracion,
+
+            Fecha_Inicio = (DateTime?)curso.Fecha_Inicio,
+            Fecha_Final = (DateTime?)curso.Fecha_Final,
+
             Cupo_Maximo = (int)curso.Cupo_Maximo,
             Idinstructor = (int)curso.Idinstructor,
-            NombreInstructor = (string?)curso.NombreInstructor ?? "", // ✅ MAPEADO
+            NombreInstructor =
+                (string?)curso.NombreInstructor ?? "",
             Estado = (string?)curso.Estado ?? "A",
+
             Detalles = detalles.ToList()
         };
     }
 
-    // ═══ CRUD ═══
+    // ============================================================
+    // INSERTAR CURSO
+    // ============================================================
 
-    public async Task<int> InsertAsync(CursoSaveDto curso, CancellationToken ct = default)
+    public async Task<int> InsertAsync(
+        CursoSaveDto curso,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-        //conn.Open();
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
+
         using var transaction = conn.BeginTransaction();
 
         try
         {
             var p = new DynamicParameters();
-            p.Add("@Idcurso", dbType: DbType.Int32, direction: ParameterDirection.Output);
+
+            p.Add(
+                "@Idcurso",
+                dbType: DbType.Int32,
+                direction: ParameterDirection.Output);
+
             p.Add("@Codigo", curso.Codigo);
             p.Add("@Curso", curso.Curso);
             p.Add("@Descripcion", curso.Descripcion);
@@ -162,15 +234,21 @@ public sealed class CursosRepository : ICursosRepository
             p.Add("@Horario", curso.Horario);
             p.Add("@Valor_Inscripcion", curso.Valor_Inscripcion);
             p.Add("@Valor_Mensual", curso.Valor_Mensual);
-            p.Add("@Tipo_Duracion", curso.Tipo_Duracion);
-            p.Add("@Duracion", curso.Duracion);
+
+            p.Add("@Fecha_Inicio", curso.Fecha_Inicio);
+            p.Add("@Fecha_Final", curso.Fecha_Final);
+
             p.Add("@Cupo_Maximo", curso.Cupo_Maximo);
             p.Add("@Idinstructor", curso.Idinstructor);
             p.Add("@Estado", curso.Estado);
 
             await conn.ExecuteAsync(
-                new CommandDefinition("[dbo].[InsertarCurso]", p,
-                    transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                new CommandDefinition(
+                    "[dbo].[InsertarCurso]",
+                    p,
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
 
             var idCurso = p.Get<int>("@Idcurso");
 
@@ -179,13 +257,21 @@ public sealed class CursosRepository : ICursosRepository
                 foreach (var detalle in curso.Detalles)
                 {
                     await conn.ExecuteAsync(
-                        new CommandDefinition("[dbo].[InsertarDetalleCurso]",
-                            new { Idcurso = idCurso, Nombre = detalle.Nombre },
-                            transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                        new CommandDefinition(
+                            "[dbo].[InsertarDetalleCurso]",
+                            new
+                            {
+                                Idcurso = idCurso,
+                                Nombre = detalle.Nombre
+                            },
+                            transaction: transaction,
+                            commandType: CommandType.StoredProcedure,
+                            cancellationToken: ct));
                 }
             }
 
             transaction.Commit();
+
             return idCurso;
         }
         catch
@@ -195,15 +281,24 @@ public sealed class CursosRepository : ICursosRepository
         }
     }
 
-    public async Task UpdateAsync(int idCurso, CursoSaveDto curso, CancellationToken ct = default)
+    // ============================================================
+    // MODIFICAR CURSO
+    // ============================================================
+
+    public async Task UpdateAsync(
+        int idCurso,
+        CursoSaveDto curso,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
-       // conn.Open();
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
+
         using var transaction = conn.BeginTransaction();
 
         try
         {
             var p = new DynamicParameters();
+
             p.Add("@Idcurso", idCurso);
             p.Add("@Codigo", curso.Codigo);
             p.Add("@Curso", curso.Curso);
@@ -212,28 +307,42 @@ public sealed class CursosRepository : ICursosRepository
             p.Add("@Horario", curso.Horario);
             p.Add("@Valor_Inscripcion", curso.Valor_Inscripcion);
             p.Add("@Valor_Mensual", curso.Valor_Mensual);
-            p.Add("@Tipo_Duracion", curso.Tipo_Duracion);
-            p.Add("@Duracion", curso.Duracion);
+
+            p.Add("@Fecha_Inicio", curso.Fecha_Inicio);
+            p.Add("@Fecha_Final", curso.Fecha_Final);
+
             p.Add("@Cupo_Maximo", curso.Cupo_Maximo);
             p.Add("@Idinstructor", curso.Idinstructor);
             p.Add("@Estado", curso.Estado);
 
             await conn.ExecuteAsync(
-                new CommandDefinition("[dbo].[ModificarCurso]", p,
-                    transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                new CommandDefinition(
+                    "[dbo].[ModificarCurso]",
+                    p,
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
 
             await conn.ExecuteAsync(
                 "DELETE FROM Detalle_Curso WHERE Idcurso = @Idcurso",
-                new { Idcurso = idCurso }, transaction: transaction);
+                new { Idcurso = idCurso },
+                transaction: transaction);
 
             if (curso.Detalles != null && curso.Detalles.Any())
             {
                 foreach (var detalle in curso.Detalles)
                 {
                     await conn.ExecuteAsync(
-                        new CommandDefinition("[dbo].[InsertarDetalleCurso]",
-                            new { Idcurso = idCurso, Nombre = detalle.Nombre },
-                            transaction: transaction, commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                        new CommandDefinition(
+                            "[dbo].[InsertarDetalleCurso]",
+                            new
+                            {
+                                Idcurso = idCurso,
+                                Nombre = detalle.Nombre
+                            },
+                            transaction: transaction,
+                            commandType: CommandType.StoredProcedure,
+                            cancellationToken: ct));
                 }
             }
 
@@ -246,49 +355,103 @@ public sealed class CursosRepository : ICursosRepository
         }
     }
 
-    public async Task DeleteAsync(int idCurso, CancellationToken ct = default)
+    // ============================================================
+    // ELIMINAR
+    // ============================================================
+
+    public async Task DeleteAsync(
+        int idCurso,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         await conn.ExecuteAsync(
-            new CommandDefinition("[dbo].[EliminarCurso]",
+            new CommandDefinition(
+                "[dbo].[EliminarCurso]",
                 new { Idcurso = idCurso },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
     }
 
-    public async Task<int> GetNextSecuenciaAsync(CancellationToken ct = default)
+    // ============================================================
+    // SECUENCIA
+    // ============================================================
+
+    public async Task<int> GetNextSecuenciaAsync(
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         return await conn.ExecuteScalarAsync<int>(
-            new CommandDefinition("[dbo].[SecuenciaCurso]",
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                "[dbo].[SecuenciaCurso]",
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
     }
 
-    // ═══ DETALLES ═══
+    // ============================================================
+    // DETALLES
+    // ============================================================
 
-    public async Task<IReadOnlyList<CursoDetalleItemDto>> GetDetallesAsync(int idCurso, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CursoDetalleItemDto>> GetDetallesAsync(
+        int idCurso,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
         var result = await conn.QueryAsync<CursoDetalleItemDto>(
-            new CommandDefinition("[dbo].[MostrarDetalleCurso]",
+            new CommandDefinition(
+                "[dbo].[MostrarDetalleCurso]",
                 new { Idcurso = idCurso },
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         return result.ToList();
     }
-    // ═══════════════════════════════════════════════════════════════
-    // CURSOS POR INSTRUCTOR (para Asistencia)
-    // ═══════════════════════════════════════════════════════════════
-    public async Task<IReadOnlyList<CursoListadoDto>> GetByInstructorAsync(int idInstructor, CancellationToken ct = default)
+
+    // ============================================================
+    // CURSOS POR INSTRUCTOR
+    // ============================================================
+
+    public async Task<IReadOnlyList<CursoListadoDto>> GetByInstructorAsync(
+        int idInstructor,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
+
         var result = await conn.QueryAsync<CursoListadoDto>(
-            new CommandDefinition("[dbo].[BuscarCurso_ByInstructor]",
-            new { Idinstructor = idInstructor },
-            commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                "[dbo].[BuscarCurso_ByInstructor]",
+                new { Idinstructor = idInstructor },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
         return result.ToList();
     }
+    public async Task<IReadOnlyList<string>> GetNivelesAsync(
+    CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
 
+        const string sql = @"
+        SELECT DISTINCT LTRIM(RTRIM(Nivel)) AS Nivel
+        FROM Curso
+        WHERE Estado <> 'E'
+          AND Nivel IS NOT NULL
+          AND LTRIM(RTRIM(Nivel)) <> ''
+        ORDER BY LTRIM(RTRIM(Nivel));";
+
+        var result = await conn.QueryAsync<string>(
+            new CommandDefinition(
+                sql,
+                commandType: CommandType.Text,
+                cancellationToken: ct));
+
+        return result.ToList();
+    }
 }

@@ -162,4 +162,15 @@ public sealed class CursosController : ControllerBase
         var result = await _repo.GetByInstructorAsync(idEmpleado, ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Obtiene los niveles registrados en los cursos.
+    /// </summary>
+    [HttpGet("niveles")]
+    [Permission(Modules.Educacion, Operations.Ver)]
+    public async Task<ActionResult<IReadOnlyList<string>>> GetNiveles(
+        CancellationToken ct)
+    {
+        return Ok(await _repo.GetNivelesAsync(ct));
+    }
 }

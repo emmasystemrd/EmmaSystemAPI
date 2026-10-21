@@ -56,7 +56,6 @@ public sealed class ClienteController : ControllerBase
         var result = await _repo.BuscarClientesActivosAsync(texto ?? "", GetIdEmpresa(), ct);
         return Ok(result);
     }
-
     /// <summary>
     /// Obtiene un cliente específico por ID
     /// </summary>
@@ -198,4 +197,5 @@ public sealed class ClienteController : ControllerBase
         var result = await _repo.BuscarCuentasContablesAsync("", GetIdEmpresa(), ct);
         return Ok(result);
     }
+
 }

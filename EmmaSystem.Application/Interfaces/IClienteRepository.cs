@@ -44,4 +44,7 @@ public interface IClienteRepository
     /// <param name="textoBuscar">Texto a buscar en Num_Cuenta, Nombre, Descripcion o Grupo</param>
     /// <param name="idEmpresa">ID de la empresa</param>
     Task<IReadOnlyList<CuentaContableDto>> BuscarCuentasContablesAsync(string textoBuscar, int idEmpresa, CancellationToken ct = default);
+
+    Task<IReadOnlyList<TutorBusquedaDto>> BuscarTutoresAsync(
+        string textoBuscar, int idEmpresa, CancellationToken ct = default);
 }

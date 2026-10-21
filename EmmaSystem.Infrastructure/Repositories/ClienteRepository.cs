@@ -92,7 +92,7 @@ public sealed class ClienteRepository : IClienteRepository
         p.Add("@Fecha_Nacimiento", null, DbType.Date);
         p.Add("@Direccion", dto.Direccion, DbType.String);
         p.Add("@Telefono", dto.Telefono, DbType.String);
-        p.Add("@Email", dto.Email, DbType.String);
+        p.Add("@Email", NormalizarEmail(dto.Email), DbType.String);
         p.Add("@Tipo_Ingreso", dto.Tipo_Ingreso, DbType.Int32);
         p.Add("@Tax", dto.Tax, DbType.Boolean);
         p.Add("@Tipo_Comprobante", dto.Tipo_Comprobante, DbType.String);
@@ -136,7 +136,7 @@ public sealed class ClienteRepository : IClienteRepository
         p.Add("@Fecha_Nacimiento", null, DbType.Date);
         p.Add("@Direccion", dto.Direccion, DbType.String);
         p.Add("@Telefono", dto.Telefono, DbType.String);
-        p.Add("@Email", dto.Email, DbType.String);
+        p.Add("@Email", NormalizarEmail(dto.Email), DbType.String);
         p.Add("@Tipo_Ingreso", dto.Tipo_Ingreso, DbType.Int32);
         p.Add("@Tax", dto.Tax, DbType.Boolean);
         p.Add("@Tipo_Comprobante", dto.Tipo_Comprobante, DbType.String);
@@ -209,4 +209,27 @@ public sealed class ClienteRepository : IClienteRepository
 
         return result.ToList();
     }
+    // EmmaSystem.Infrastructure/Repositories/ClienteRepository.cs
+// AGREGAR métodos:
+    public async Task<IReadOnlyList<TutorBusquedaDto>> BuscarTutoresAsync(
+        string textoBuscar, int idEmpresa, CancellationToken ct = default)
+    {
+        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+
+        var texto = (textoBuscar ?? string.Empty).Trim();
+        if (texto.Length > 50) texto = texto[..50];
+
+        var result = await conn.QueryAsync<TutorBusquedaDto>(
+            new CommandDefinition("[dbo].[spbuscar_tutor_estudiante]",
+                new { TextoBuscar = texto, Idempresa = EmpresaIdInterna },
+                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+
+        return result.AsList();
+    }
+
+    private static string? NormalizarEmail(string? email)
+        => string.IsNullOrWhiteSpace(email) ? null : email.Trim();
+
+// En CreateAsync y UpdateAsync REEMPLAZAR la línea del email:
+        
 }

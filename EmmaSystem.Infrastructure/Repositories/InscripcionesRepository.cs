@@ -124,46 +124,99 @@ public sealed class InscripcionesRepository : IInscripcionesRepository
         };
     }
 
-    public async Task<int> InsertAsync(InscripcionSaveDto dto, CancellationToken ct = default)
+    public async Task<int> InsertAsync(
+     InscripcionSaveDto dto,
+     CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
+
+        var fechasCurso = await conn.QueryFirstOrDefaultAsync<(
+            DateTime? Fecha_Inicio,
+            DateTime? Fecha_Final
+        )>(
+            new CommandDefinition(
+                @"SELECT Fecha_Inicio, Fecha_Final
+              FROM Curso
+              WHERE Idcurso = @Idcurso
+                AND Estado = 'A'",
+                new { dto.Idcurso },
+                cancellationToken: ct));
+
+        if (fechasCurso == default)
+            throw new InvalidOperationException(
+                "El curso seleccionado no existe o no está activo.");
 
         var p = new DynamicParameters();
+
         p.Add("@Codigo", dto.Codigo ?? "");
         p.Add("@Fecha", dto.Fecha);
         p.Add("@IdEstudiante", dto.IdEstudiante);
         p.Add("@Idcurso", dto.Idcurso);
-        p.Add("@Fecha1", dto.Fecha1);
-        p.Add("@Fecha2", dto.Fecha2);
+
+        // Fechas tomadas automáticamente del curso
+        p.Add("@Fecha1", fechasCurso.Fecha_Inicio);
+        p.Add("@Fecha2", fechasCurso.Fecha_Final);
+
         p.Add("@Idinstructor", dto.Idinstructor);
         p.Add("@Idlogin", dto.Idlogin);
         p.Add("@IsFacturaAutomatica", dto.IsFacturaAutomatica);
 
-        // ✅ CORREGIDO: El SP ahora devuelve el ID directamente
         var id = await conn.ExecuteScalarAsync<int>(
-            new CommandDefinition("[dbo].[InsertarInscripcion]", p,
-            commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                "[dbo].[InsertarInscripcion]",
+                p,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
         return id;
     }
 
-    public async Task UpdateAsync(int idInscripcion, InscripcionSaveDto dto, CancellationToken ct = default)
+
+    public async Task UpdateAsync(
+        int idInscripcion,
+        InscripcionSaveDto dto,
+        CancellationToken ct = default)
     {
-        using var conn = await _connectionFactory.CrearConexionAsync(_tenantContext.EmpresaId);
+        using var conn = await _connectionFactory
+            .CrearConexionAsync(_tenantContext.EmpresaId);
+
+        var fechasCurso = await conn.QueryFirstOrDefaultAsync<(
+            DateTime? Fecha_Inicio,
+            DateTime? Fecha_Final
+        )>(
+            new CommandDefinition(
+                @"SELECT Fecha_Inicio, Fecha_Final
+              FROM Curso
+              WHERE Idcurso = @Idcurso
+                AND Estado = 'A'",
+                new { dto.Idcurso },
+                cancellationToken: ct));
+
+        if (fechasCurso == default)
+            throw new InvalidOperationException(
+                "El curso seleccionado no existe o no está activo.");
 
         var p = new DynamicParameters();
+
         p.Add("@IdInscripcion", idInscripcion);
         p.Add("@Fecha", dto.Fecha);
         p.Add("@IdEstudiante", dto.IdEstudiante);
         p.Add("@Idcurso", dto.Idcurso);
         p.Add("@Idinstructor", dto.Idinstructor);
-        p.Add("@Fecha1", dto.Fecha1);
-        p.Add("@Fecha2", dto.Fecha2);
+
+        // Fechas tomadas automáticamente del curso
+        p.Add("@Fecha1", fechasCurso.Fecha_Inicio);
+        p.Add("@Fecha2", fechasCurso.Fecha_Final);
+
         p.Add("@IsFacturaAutomatica", dto.IsFacturaAutomatica);
 
         await conn.ExecuteAsync(
-            new CommandDefinition("[dbo].[ModificarInscripcion]", p,
-                commandType: CommandType.StoredProcedure, cancellationToken: ct));
+            new CommandDefinition(
+                "[dbo].[ModificarInscripcion]",
+                p,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
     }
 
     public async Task DeleteAsync(int idInscripcion, CancellationToken ct = default)

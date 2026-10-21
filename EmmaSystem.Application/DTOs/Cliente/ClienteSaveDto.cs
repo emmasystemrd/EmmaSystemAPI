@@ -34,7 +34,9 @@ public sealed class ClienteSaveDto
     [StringLength(10)]
     public string? Telefono { get; init; }
 
-    [StringLength(50), EmailAddress]
+    // EmmaSystem.Application/DTOs/Cliente/ClienteSaveDto.cs
+    // REEMPLAZAR la propiedad Email:
+    [StringLength(50), OptionalEmailAddress]
     public string? Email { get; init; }
 
     public int Tipo_Ingreso { get; init; } = 1;

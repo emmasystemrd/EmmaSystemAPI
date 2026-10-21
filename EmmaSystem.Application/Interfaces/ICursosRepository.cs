@@ -14,14 +14,14 @@ public interface ICursosRepository
     Task DeleteAsync(int idCurso, CancellationToken ct = default);
     Task<int> GetNextSecuenciaAsync(CancellationToken ct = default);
 
+    // Niveles dinámicos
+    Task<IReadOnlyList<string>> GetNivelesAsync(CancellationToken ct = default);
+
     // Detalles
     Task<IReadOnlyList<CursoDetalleItemDto>> GetDetallesAsync(int idCurso, CancellationToken ct = default);
 
-    // ═══════════════════════════════════════════════════════════════
-    // CURSOS POR INSTRUCTOR (para Asistencia)
-    // ═══════════════════════════════════════════════════════════════
-    /// <summary>
-    /// Obtiene los cursos activos asignados a un instructor específico.
-    /// </summary>
-    Task<IReadOnlyList<CursoListadoDto>> GetByInstructorAsync(int idInstructor, CancellationToken ct = default);
+    // Cursos por instructor
+    Task<IReadOnlyList<CursoListadoDto>> GetByInstructorAsync(
+        int idInstructor,
+        CancellationToken ct = default);
 }
